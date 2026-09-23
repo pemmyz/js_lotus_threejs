@@ -128,6 +128,10 @@ class Car {
     this.slipTime = 0;
     this.offRoad = false;
 
+    // Visual steering angle state
+    this.steerAngle = 0;
+    this.steerYaw = 0;
+
     this.mesh = CarModelFactory.createWedgeCar(this.color, this.isPlayer);
     this.scene.add(this.mesh);
   }
@@ -174,9 +178,15 @@ class Car {
     this.mesh.position.y += this.altitude + 0.05;
 
     if (this.slipTime <= 0) {
-      // Subtraction aligns local -Z (nose and headlights) facing forward down the track
-      // and keeps the car completely flat with zero sideways roll tilt
-      const lookTarget = this.mesh.position.clone().sub(roadInfo.tangent);
+      // Smoothly interpolate visual steering yaw and return toward center
+      this.steerYaw = THREE.MathUtils.lerp(this.steerYaw || 0, this.steerAngle || 0, delta * 12);
+      this.steerAngle = 0;
+
+      // Flipped forward orientation with matching steering turn direction
+      const lookTarget = this.mesh.position.clone()
+        .sub(roadInfo.tangent)
+        .addScaledVector(roadInfo.normal, -this.steerYaw * 0.4);
+
       this.mesh.lookAt(lookTarget);
     }
 
@@ -202,6 +212,7 @@ class Car {
     const slipFactor = this.slipTime > 0 ? 0.25 : 1.0;
     this.laneOffset += amount * this.steeringSensitivity * slipFactor * delta;
     this.laneOffset = Math.max(-1.3, Math.min(1.3, this.laneOffset));
+    this.steerAngle = amount; // Track turning input
   }
 
   accelerate(delta) {
