@@ -370,19 +370,17 @@ class Track {
       const objPos = point.clone().addScaledVector(normal, side * distFromRoad);
 
       if (i % 3 === 0) {
-        // Low-Poly Trees
+        // Low-Poly Trees planted on ground
         const tree = this.createTreeMesh();
-        tree.position.copy(objPos);
-        tree.position.y = Math.max(0, objPos.y);
+        tree.position.set(objPos.x, 0, objPos.z);
         this.sceneryGroup.add(tree);
       } else if (i % 3 === 1) {
-        // Rocks
+        // Rocks embedded on ground
         const rock = this.createRockMesh();
-        rock.position.copy(objPos);
-        rock.position.y = Math.max(0, objPos.y);
+        rock.position.set(objPos.x, 0.4, objPos.z);
         this.sceneryGroup.add(rock);
       } else {
-        // Chevron Warning Signs
+        // Chevron Warning Signs (remain aligned with elevated road shoulders)
         const sign = this.createSignMesh(side > 0 ? 'RIGHT' : 'LEFT');
         sign.position.copy(point).addScaledVector(normal, side * 8.8);
         sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
