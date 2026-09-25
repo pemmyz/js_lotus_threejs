@@ -126,6 +126,7 @@ class Car {
     this.altitude = 0;
     this.verticalVelocity = 0;
     this.slipTime = 0;
+    this.hazardCooldown = 0;
     this.offRoad = false;
 
     // Visual steering angle state
@@ -137,6 +138,19 @@ class Car {
   }
 
   updatePhysics(delta, track) {
+    if (this.hazardCooldown > 0) {
+      this.hazardCooldown -= delta;
+    }
+
+    if (this.altitude > 0 || this.verticalVelocity !== 0) {
+      this.altitude += this.verticalVelocity * delta;
+      this.verticalVelocity -= 22.0 * delta;
+      if (this.altitude <= 0) {
+        this.altitude = 0;
+        this.verticalVelocity = 0;
+      }
+    }
+
     if (this.slipTime > 0) {
       this.slipTime -= delta;
       this.mesh.rotation.y += delta * 15.0;
@@ -238,6 +252,14 @@ class Car {
     if (type === 'OIL') {
       this.slipTime = 0.8;
       if (window.ATR.Audio) window.ATR.Audio.playSkid();
+    } else if (type === 'LOG' || type === 'ROCK') {
+      if (this.hazardCooldown > 0) return;
+      this.hazardCooldown = 0.9;
+      // Heavy arcade crash penalty and bounce
+      this.speed = Math.max(0, this.speed * 0.28);
+      this.verticalVelocity = 4.5;
+      this.altitude = 0.3;
+      if (window.ATR.Audio) window.ATR.Audio.playCrash();
     }
   }
 }
@@ -264,6 +286,23 @@ class AIController {
     if (this.laneChangeTimer <= 0) {
       this.laneChangeTimer = 2.0 + Math.random() * 3.5;
       this.targetLane = (Math.random() * 1.4 - 0.7);
+    }
+
+    // AI Obstacle Avoidance for half-road blocks and logs
+    if (this.track && this.track.obstacles) {
+      for (let obs of this.track.obstacles) {
+        if (obs.type === 'LOG' || obs.type === 'ROCK') {
+          const dist = this.car.mesh.position.distanceTo(obs.position);
+          if (dist < 32.0) {
+            // If obstacle blocks the left (side === -1), dodge right; otherwise dodge left
+            if (obs.side === -1 && this.targetLane < 0.2) {
+              this.targetLane = 0.6;
+            } else if (obs.side === 1 && this.targetLane > -0.2) {
+              this.targetLane = -0.6;
+            }
+          }
+        }
+      }
     }
 
     for (let other of allCars) {

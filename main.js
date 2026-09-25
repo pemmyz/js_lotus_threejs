@@ -296,7 +296,7 @@ class Game {
       const dist = player.mesh.position.distanceTo(obs.position);
       if (dist < obs.radius) {
         player.hitHazard(obs.type);
-        this.shakeIntensity = 0.5;
+        this.shakeIntensity = obs.type === 'OIL' ? 0.5 : 1.3;
       }
     }
 

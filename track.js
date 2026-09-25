@@ -445,33 +445,150 @@ class Track {
     return group;
   }
 
-  buildObstacles() {
-    const count = 25;
-    for (let i = 0; i < count; i++) {
-      const t = 0.12 + (i / count) * 0.84;
-      const point = this.spline.getPointAt(t);
-      const tangent = this.spline.getTangentAt(t).normalize();
-      const up = new THREE.Vector3(0, 1, 0);
-      const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+  createLogMesh(length = 6.8) {
+    const group = new THREE.Group();
+    const barkMat = new THREE.MeshStandardMaterial({ color: 0x3e2312, roughness: 0.9, flatShading: true });
+    const endMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.7 });
 
-      const laneOffsetRatio = (Math.random() * 1.2 - 0.6);
-      const obstaclePos = point.clone().addScaledVector(normal, laneOffsetRatio * (this.roadWidth * 0.45));
+    const trunkGeo = new THREE.CylinderGeometry(0.44, 0.5, length, 8);
+    trunkGeo.rotateZ(Math.PI / 2); // Aligns along local X (road normal)
+    const trunk = new THREE.Mesh(trunkGeo, barkMat);
+    group.add(trunk);
 
-      let mesh = new THREE.Mesh(
-        new THREE.CircleGeometry(2.0, 8),
-        new THREE.MeshBasicMaterial({ color: 0x111115, opacity: 0.85, transparent: true, side: THREE.DoubleSide })
-      );
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.copy(obstaclePos).setY(obstaclePos.y + 0.08);
+    // End cuts
+    const capGeo = new THREE.CircleGeometry(0.44, 8);
+    const capL = new THREE.Mesh(capGeo, endMat);
+    capL.rotation.y = -Math.PI / 2;
+    capL.position.x = -length * 0.5;
 
-      this.sceneryGroup.add(mesh);
-      this.obstacles.push({
-        type: 'OIL',
-        t,
-        position: obstaclePos,
-        radius: 2.0
-      });
+    const capR = new THREE.Mesh(capGeo, endMat);
+    capR.rotation.y = Math.PI / 2;
+    capR.position.x = length * 0.5;
+    group.add(capL, capR);
+
+    // Branch nub
+    const branch = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.18, 0.8, 5),
+      barkMat
+    );
+    branch.position.set(length * 0.15, 0.45, 0.15);
+    branch.rotation.z = 0.4;
+    group.add(branch);
+
+    return group;
+  }
+
+  createRoadRockObstacle(width = 6.2) {
+    const group = new THREE.Group();
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x696c73, roughness: 0.9, flatShading: true });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x484a50, roughness: 0.95, flatShading: true });
+
+    const numRocks = 4;
+    for (let i = 0; i < numRocks; i++) {
+      const radius = 0.75 + Math.random() * 0.55;
+      const rockGeo = new THREE.DodecahedronGeometry(radius, 0);
+      const mesh = new THREE.Mesh(rockGeo, i % 2 === 0 ? rockMat : darkMat);
+
+      const x = (i / (numRocks - 1) - 0.5) * (width * 0.72) + (Math.random() - 0.5) * 0.5;
+      const z = (Math.random() - 0.5) * 0.7;
+      mesh.position.set(x, radius * 0.7, z);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      group.add(mesh);
     }
+    return group;
+  }
+
+  buildObstacles() {
+    const minLogSpacingMeters = this.roadWidth * 2.4; // Exceeds 2 track widths (>= 33.6m)
+    const minSpacingT = minLogSpacingMeters / this.totalLength;
+
+    let currentT = 0.13;
+    let patternCounter = 0;
+
+    while (currentT < 0.92) {
+      patternCounter++;
+      const patternType = patternCounter % 4;
+
+      if (patternType === 1 || patternType === 3) {
+        // SLALOM / CHICANE: First log on one side, second on opposite side after >= 2 track widths
+        const firstSide = Math.random() > 0.5 ? -1 : 1;
+        const secondSide = -firstSide;
+
+        // Place first log
+        this.spawnHalfRoadObstacle('LOG', currentT, firstSide);
+
+        // Advance by at least 2 full track widths before the second log
+        const chicaneGapMeters = this.roadWidth * (2.2 + Math.random() * 0.8); // 30.8m - 42m
+        currentT += chicaneGapMeters / this.totalLength;
+
+        // Place second log on the opposite side (forcing slalom)
+        this.spawnHalfRoadObstacle('LOG', currentT, secondSide);
+
+        // Advance by at least 2 track widths before next hazard
+        currentT += minSpacingT + (Math.random() * 25) / this.totalLength;
+
+      } else if (patternType === 2) {
+        // HALF-ROAD STONE CLUSTER
+        const side = Math.random() > 0.5 ? -1 : 1;
+        this.spawnHalfRoadObstacle('ROCK', currentT, side);
+        currentT += minSpacingT + (Math.random() * 20) / this.totalLength;
+
+      } else {
+        // OIL SLICK HAZARD
+        const tInfo = this.getRoadTransformAt(currentT);
+        const laneOffsetRatio = (Math.random() * 1.0 - 0.5);
+        const oilPos = tInfo.center.clone().addScaledVector(tInfo.normal, laneOffsetRatio * (this.roadWidth * 0.4));
+
+        const oilMesh = new THREE.Mesh(
+          new THREE.CircleGeometry(2.0, 8),
+          new THREE.MeshBasicMaterial({ color: 0x111115, opacity: 0.85, transparent: true, side: THREE.DoubleSide })
+        );
+        oilMesh.rotation.x = -Math.PI / 2;
+        oilMesh.position.copy(oilPos).setY(oilPos.y + 0.08);
+
+        this.sceneryGroup.add(oilMesh);
+        this.obstacles.push({
+          type: 'OIL',
+          t: currentT,
+          side: 0,
+          position: oilPos,
+          radius: 2.0
+        });
+
+        currentT += (this.roadWidth * 1.8) / this.totalLength;
+      }
+    }
+  }
+
+  spawnHalfRoadObstacle(type, t, side) {
+    const up = new THREE.Vector3(0, 1, 0);
+    const tInfo = this.getRoadTransformAt(t);
+
+    // Center obstacle in either left (-3.5m) or right (+3.5m) half of the 14m road
+    const halfRoadCenter = side * (this.roadWidth * 0.25);
+    const obsPos = tInfo.center.clone().addScaledVector(tInfo.normal, halfRoadCenter);
+
+    let mesh;
+    if (type === 'LOG') {
+      mesh = this.createLogMesh(this.roadWidth * 0.48);
+    } else {
+      mesh = this.createRoadRockObstacle(this.roadWidth * 0.46);
+    }
+
+    // Orient geometry across the road ribbon
+    const basisMatrix = new THREE.Matrix4().makeBasis(tInfo.normal, up, tInfo.tangent);
+    mesh.quaternion.setFromRotationMatrix(basisMatrix);
+    mesh.position.copy(obsPos);
+    mesh.position.y += 0.25;
+
+    this.sceneryGroup.add(mesh);
+    this.obstacles.push({
+      type,
+      t,
+      side,
+      position: obsPos,
+      radius: this.roadWidth * 0.26 // 3.6m radius strictly covers only that half of the road
+    });
   }
 
   // Get Road Center, Tangent, and Normal at normalized distance t (0.0 to 1.0)
