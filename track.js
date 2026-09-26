@@ -450,13 +450,15 @@ class Track {
     const barkMat = new THREE.MeshStandardMaterial({ color: 0x3e2312, roughness: 0.9, flatShading: true });
     const endMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.7 });
 
-    const trunkGeo = new THREE.CylinderGeometry(0.44, 0.5, length, 8);
+    // Uniform cylinder radius ensures edges are strictly parallel to the road ribbon
+    const radius = 0.46;
+    const trunkGeo = new THREE.CylinderGeometry(radius, radius, length, 10);
     trunkGeo.rotateZ(Math.PI / 2); // Aligns along local X (road normal)
     const trunk = new THREE.Mesh(trunkGeo, barkMat);
     group.add(trunk);
 
     // End cuts
-    const capGeo = new THREE.CircleGeometry(0.44, 8);
+    const capGeo = new THREE.CircleGeometry(radius, 10);
     const capL = new THREE.Mesh(capGeo, endMat);
     capL.rotation.y = -Math.PI / 2;
     capL.position.x = -length * 0.5;
@@ -466,13 +468,13 @@ class Track {
     capR.position.x = length * 0.5;
     group.add(capL, capR);
 
-    // Branch nub
+    // Branch nub aligned with vertical axis
     const branch = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.18, 0.8, 5),
+      new THREE.CylinderGeometry(0.12, 0.16, 0.7, 5),
       barkMat
     );
-    branch.position.set(length * 0.15, 0.45, 0.15);
-    branch.rotation.z = 0.4;
+    branch.position.set(length * 0.15, radius + 0.25, 0);
+    branch.rotation.z = 0.35;
     group.add(branch);
 
     return group;
@@ -561,7 +563,6 @@ class Track {
   }
 
   spawnHalfRoadObstacle(type, t, side) {
-    const up = new THREE.Vector3(0, 1, 0);
     const tInfo = this.getRoadTransformAt(t);
 
     // Center obstacle in either left (-3.5m) or right (+3.5m) half of the 14m road
@@ -575,11 +576,16 @@ class Track {
       mesh = this.createRoadRockObstacle(this.roadWidth * 0.46);
     }
 
-    // Orient geometry across the road ribbon
-    const basisMatrix = new THREE.Matrix4().makeBasis(tInfo.normal, up, tInfo.tangent);
+    // Build a true right-handed orthonormal basis:
+    // X = tInfo.normal (strictly perpendicular across the road ribbon)
+    // Y = roadUp (surface normal perpendicular to the road incline)
+    // Z = -tInfo.tangent (aligned with track direction)
+    const roadUp = new THREE.Vector3().crossVectors(tInfo.normal, tInfo.tangent).normalize();
+    const forward = tInfo.tangent.clone().negate();
+    const basisMatrix = new THREE.Matrix4().makeBasis(tInfo.normal, roadUp, forward);
+
     mesh.quaternion.setFromRotationMatrix(basisMatrix);
-    mesh.position.copy(obsPos);
-    mesh.position.y += 0.25;
+    mesh.position.copy(obsPos).addScaledVector(roadUp, 0.25);
 
     this.sceneryGroup.add(mesh);
     this.obstacles.push({
