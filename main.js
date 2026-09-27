@@ -50,6 +50,7 @@ class Game {
     this.aiCars = [];
     this.allCars = [];
     this.shakeIntensity = 0;
+    this.smokeSystem = null;
 
     // Menu Showcase Car
     this.showcaseCar = window.ATR.CarModelFactory.createWedgeCar(0xff0044, true);
@@ -159,6 +160,14 @@ class Game {
     this.allCars.forEach(c => this.scene.remove(c.mesh));
     this.allCars = [];
     this.aiCars = [];
+
+    // Initialize or clear particle system
+    if (this.smokeSystem) {
+      this.smokeSystem.clear();
+    } else if (window.ATR.SmokeParticleSystem) {
+      this.smokeSystem = new window.ATR.SmokeParticleSystem(this.scene);
+      window.ATR.smokeSystem = this.smokeSystem;
+    }
 
     // Generate Guaranteed Continuous Circuit
     const generator = new window.ATR.TrackGenerator();
@@ -411,6 +420,9 @@ class Game {
     document.getElementById('main-menu').classList.remove('hidden');
 
     window.ATR.Audio.stopEngines();
+    if (this.smokeSystem) {
+      this.smokeSystem.clear();
+    }
     this.showcaseCar.visible = true;
   }
 
@@ -440,6 +452,11 @@ class Game {
 
     if (this.player1) this.player1.updatePhysics(delta, this.track);
     if (this.player2) this.player2.updatePhysics(delta, this.track);
+
+    // Update smoke particles
+    if (this.smokeSystem) {
+      this.smokeSystem.update(delta);
+    }
 
     this.updateHUD(this.player1, 'p1');
     if (this.player2) this.updateHUD(this.player2, 'p2');
