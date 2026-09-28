@@ -10,23 +10,83 @@
   padding: 0;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 html, body {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  background-color: #050508;
+  background-color: #030408;
   font-family: 'Chakra Petch', sans-serif;
   color: #fff;
 }
 
+/* --- MOBILE MODE LOCK --- */
+body.mobile-mode {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* --- TOGGLE BUTTON (TOP-LEFT CORNER, ABOVE ALL UI) --- */
+#mobile-btn {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 9999; /* Higher than any UI, CRT overlay, or modal */
+  background: rgba(14, 20, 34, 0.88);
+  color: #00ffff;
+  border: 2px solid #00ffff;
+  border-radius: 4px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+  transition: all 0.15s ease;
+  pointer-events: auto;
+}
+
+#mobile-btn:hover {
+  background: #00ffff;
+  color: #000;
+  box-shadow: 0 0 18px #00ffff;
+}
+
+/* --- GAME CONTAINER & FULL VIEWPORT RESIZING (NO LETTERBOX) --- */
 #game-container {
   position: absolute;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
+  display: block;
+  overflow: hidden;
+}
+
+#screen {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  transform: none !important;
+  box-shadow: none;
+}
+
+#game-area {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 #game-canvas {
@@ -43,10 +103,10 @@ html, body {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%),
               linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
   background-size: 100% 3px, 6px 100%;
-  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.65);
   z-index: 10;
 }
 
@@ -55,7 +115,7 @@ html, body {
   position: absolute;
   top: 50%;
   left: 0;
-  width: 100vw;
+  width: 100%;
   height: 8px;
   transform: translateY(-50%);
   display: flex;
@@ -76,9 +136,9 @@ html, body {
   background: #111;
   color: #ffee00;
   border: 2px solid #ff0055;
-  font-size: 10px;
+  font-size: 9px;
   font-family: 'Press Start 2P', monospace;
-  padding: 2px 10px;
+  padding: 2px 8px;
   letter-spacing: 1px;
 }
 
@@ -86,46 +146,50 @@ html, body {
 .hud-layer {
   position: absolute;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
   z-index: 12;
 }
 
-/* In 2P Mode: P1 uses top half, P2 uses bottom half */
 body.split-screen #hud-p1 {
-  height: 50vh;
+  height: 50%;
   top: 0;
 }
 
 body.split-screen #hud-p2 {
-  height: 50vh;
-  top: 50vh;
+  height: 50%;
+  top: 50%;
 }
 
 .hud-top-left {
   position: absolute;
-  top: 15px;
-  left: 20px;
+  top: 14px;
+  left: 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+/* Offset HUD slightly if the mobile button is displayed on desktop */
+#mobile-btn:not(.hidden) ~ #game-container .hud-top-left {
+  left: 16px;
 }
 
 .hud-top-right {
   position: absolute;
-  top: 15px;
-  right: 25px;
+  top: 14px;
+  right: 18px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
 }
 
 .hud-player-tag {
   font-family: 'Press Start 2P', monospace;
-  font-size: 16px;
-  padding: 6px 12px;
-  border-radius: 4px;
+  font-size: 14px;
+  padding: 5px 10px;
+  border-radius: 3px;
   font-weight: bold;
 }
 
@@ -144,15 +208,15 @@ body.split-screen #hud-p2 {
 .hud-box {
   background: rgba(8, 12, 24, 0.75);
   border: 2px solid #2a3b5c;
-  padding: 4px 10px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 3px;
   display: flex;
   flex-direction: column;
-  min-width: 70px;
+  min-width: 64px;
 }
 
 .hud-label {
-  font-size: 10px;
+  font-size: 9px;
   color: #8fa0c0;
   font-weight: 700;
   letter-spacing: 1px;
@@ -160,7 +224,7 @@ body.split-screen #hud-p2 {
 
 .hud-value {
   font-family: 'Press Start 2P', monospace;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .neon-yellow { color: #ffe600; text-shadow: 0 0 6px rgba(255, 230, 0, 0.8); }
@@ -170,12 +234,12 @@ body.split-screen #hud-p2 {
 .hud-bar-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .hud-bar-frame {
-  width: 100px;
-  height: 12px;
+  width: 90px;
+  height: 10px;
   background: #111;
   border: 1px solid #445;
   border-radius: 2px;
@@ -209,7 +273,7 @@ body.split-screen #hud-p2 {
 .hud-speedometer {
   background: rgba(10, 10, 20, 0.85);
   border: 2px solid #ffe600;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 4px;
   display: flex;
   align-items: baseline;
@@ -218,13 +282,13 @@ body.split-screen #hud-p2 {
 
 .speed-digits {
   font-family: 'Press Start 2P', monospace;
-  font-size: 22px;
+  font-size: 20px;
   color: #ffe600;
   text-shadow: 0 0 8px rgba(255, 230, 0, 0.9);
 }
 
 .speed-unit {
-  font-size: 11px;
+  font-size: 10px;
   color: #aaa;
 }
 
@@ -234,10 +298,10 @@ body.split-screen #hud-p2 {
   left: 50%;
   transform: translate(-50%, -50%);
   background: rgba(255, 0, 60, 0.9);
-  padding: 10px 24px;
-  border: 3px solid #fff;
+  padding: 8px 20px;
+  border: 2px solid #fff;
   font-family: 'Press Start 2P', monospace;
-  font-size: 18px;
+  font-size: 16px;
   animation: pulse-msg 0.5s infinite alternate;
 }
 
@@ -249,18 +313,18 @@ body.split-screen #hud-p2 {
 /* Minimap (Bottom-Left Corner) */
 #minimap-container {
   position: absolute;
-  bottom: 20px;
-  left: 20px;
-  width: 160px;
-  height: 160px;
-  background: rgba(20, 25, 35, 0.45); /* Transparent grey to prevent blocking view */
+  bottom: 16px;
+  left: 16px;
+  width: 140px;
+  height: 140px;
+  background: rgba(18, 22, 34, 0.45); /* Transparent grey */
   border: 2px solid rgba(120, 160, 220, 0.35);
-  border-radius: 8px;
+  border-radius: 6px;
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   z-index: 20;
   pointer-events: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 #minimap-canvas {
@@ -272,7 +336,7 @@ body.split-screen #hud-p2 {
 /* Countdown Overlay */
 #countdown-banner {
   position: absolute;
-  top: 40%;
+  top: 42%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 30;
@@ -281,7 +345,7 @@ body.split-screen #hud-p2 {
 
 #countdown-text {
   font-family: 'Press Start 2P', monospace;
-  font-size: 72px;
+  font-size: 64px;
   color: #ffee00;
   text-shadow: 0 0 20px #ff0055, 0 0 40px #ff0055;
   animation: countdown-pop 0.9s ease-out;
@@ -296,11 +360,11 @@ body.split-screen #hud-p2 {
 /* Controls Hint */
 #controls-hint {
   position: absolute;
-  bottom: 25px;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 20px;
+  gap: 14px;
   z-index: 25;
   pointer-events: none;
   animation: fadeOutHint 6s forwards;
@@ -314,15 +378,15 @@ body.split-screen #hud-p2 {
 .hint-card {
   background: rgba(10, 15, 30, 0.85);
   border: 2px solid #3d5a80;
-  padding: 10px 18px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-size: 11px;
   text-align: center;
 }
 
 .hint-title {
   font-weight: bold;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .p1-color { color: #ff4444; }
 .p2-color { color: #00bfff; }
@@ -332,8 +396,8 @@ body.split-screen #hud-p2 {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -343,37 +407,37 @@ body.split-screen #hud-p2 {
 
 .menu-content {
   background: rgba(12, 16, 28, 0.95);
-  border: 4px solid #00ffff;
-  box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), inset 0 0 20px rgba(0, 255, 255, 0.2);
-  padding: 35px 50px;
-  border-radius: 10px;
+  border: 3px solid #00ffff;
+  box-shadow: 0 0 26px rgba(0, 255, 255, 0.35), inset 0 0 16px rgba(0, 255, 255, 0.15);
+  padding: 24px 36px;
+  border-radius: 8px;
   text-align: center;
-  max-width: 620px;
-  width: 90%;
+  max-width: 540px;
+  width: 88%;
 }
 
 .glitch-title {
   font-family: 'Press Start 2P', monospace;
-  font-size: 26px;
+  font-size: 22px;
   color: #ffee00;
   text-shadow: 3px 3px 0 #ff0055, -2px -2px 0 #00ffff;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .retro-subtitle {
-  font-size: 14px;
-  letter-spacing: 4px;
+  font-size: 12px;
+  letter-spacing: 3px;
   color: #00ffff;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .seed-badge {
   font-family: 'Press Start 2P', monospace;
-  font-size: 11px;
+  font-size: 10px;
   background: #111e33;
-  padding: 6px 14px;
+  padding: 5px 12px;
   display: inline-block;
-  margin-bottom: 25px;
+  margin-bottom: 18px;
   border: 1px solid #2f4b7c;
   color: #ffcc00;
 }
@@ -381,7 +445,7 @@ body.split-screen #hud-p2 {
 .menu-buttons {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .retro-btn {
@@ -389,8 +453,8 @@ body.split-screen #hud-p2 {
   border: 2px solid #4361ee;
   color: #fff;
   font-family: 'Press Start 2P', monospace;
-  font-size: 12px;
-  padding: 14px 20px;
+  font-size: 11px;
+  padding: 12px 16px;
   cursor: pointer;
   transition: all 0.15s ease;
   letter-spacing: 1px;
@@ -399,7 +463,7 @@ body.split-screen #hud-p2 {
 .retro-btn:hover {
   background: #4361ee;
   color: #ffee00;
-  box-shadow: 0 0 15px #4361ee;
+  box-shadow: 0 0 12px #4361ee;
   transform: translateY(-2px);
 }
 
@@ -411,7 +475,7 @@ body.split-screen #hud-p2 {
 .btn-primary:hover {
   background: #ff0055;
   color: #fff;
-  box-shadow: 0 0 20px #ff0055;
+  box-shadow: 0 0 16px #ff0055;
 }
 
 .btn-secondary {
@@ -422,12 +486,12 @@ body.split-screen #hud-p2 {
 .btn-secondary:hover {
   background: #00ffff;
   color: #000;
-  box-shadow: 0 0 20px #00ffff;
+  box-shadow: 0 0 16px #00ffff;
 }
 
 .menu-footer {
-  margin-top: 25px;
-  font-size: 11px;
+  margin-top: 18px;
+  font-size: 10px;
   color: #667799;
   display: flex;
   justify-content: space-between;
@@ -438,24 +502,24 @@ body.split-screen #hud-p2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 14px 0;
-  font-size: 14px;
+  margin: 12px 0;
+  font-size: 13px;
 }
 
 .retro-select, .retro-slider {
   background: #1c2744;
   color: #fff;
   border: 2px solid #3d5a80;
-  padding: 6px 12px;
+  padding: 5px 10px;
   font-family: 'Chakra Petch', sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   border-radius: 4px;
 }
 
 /* Results Board */
 .results-table {
-  margin-top: 20px;
-  font-size: 14px;
+  margin-top: 16px;
+  font-size: 13px;
   border-collapse: collapse;
   width: 100%;
 }
@@ -463,11 +527,93 @@ body.split-screen #hud-p2 {
 .results-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid #223355;
 }
 
 .results-row.p1-row { color: #ff5555; font-weight: bold; background: rgba(255, 0, 0, 0.1); }
 .results-row.p2-row { color: #00bfff; font-weight: bold; background: rgba(0, 150, 255, 0.1); }
+
+/* --- MOBILE TOUCH CONTROLS OVERLAY --- */
+#mobile-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3000;
+  display: none;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Visible when in mobile mode */
+body.mobile-mode #mobile-controls {
+  display: flex;
+}
+
+.mobile-control-btn {
+  pointer-events: auto;
+  width: 72px;
+  height: 72px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 2.5px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 28px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  user-select: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: transform 0.08s, background 0.08s;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.mobile-control-btn:active {
+  background: rgba(255, 255, 255, 0.45);
+  transform: scale(0.92);
+}
+
+.btn-gas {
+  border-color: #00ff66;
+  color: #00ff66;
+}
+
+.btn-brake {
+  border-color: #ff3344;
+  color: #ff3344;
+  width: 62px;
+  height: 62px;
+  font-size: 22px;
+}
+
+.btn-turbo {
+  border-color: #00ffff;
+  color: #00ffff;
+  width: 58px;
+  height: 58px;
+  font-size: 20px;
+}
+
+#mobile-dpad {
+  display: flex;
+  gap: 14px;
+  margin-left: 12px;
+  margin-bottom: 12px;
+}
+
+#mobile-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 12px;
+  margin-bottom: 12px;
+}
 
 .hidden { display: none !important; }

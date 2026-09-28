@@ -1,9 +1,8 @@
 /* ===================================================
    AMIGA TURBO RACER - MAIN CONTROLLER & SPLIT ENGINE
-   Handles Three.js rendering, horizontal split-screen
-   scissor testing, fullscreen single-player, camera shake,
-   dynamic speed FOV, gamepad/keyboard inputs, minimap,
-   and game states.
+   Handles Three.js rendering, horizontal split-screen,
+   responsive full-window scaling, mobile touch controls,
+   camera shake, dynamic speed FOV, and game states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -12,6 +11,7 @@ class Game {
   constructor() {
     this.canvas = document.getElementById('game-canvas');
     this.container = document.getElementById('game-container');
+    this.screenElement = document.getElementById('screen');
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
@@ -24,7 +24,7 @@ class Game {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0c18);
 
-    // Perspective Cameras with extended draw distance
+    // Perspective Cameras sized to browser window
     this.cameraP1 = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 2000);
     this.cameraP2 = new THREE.PerspectiveCamera(70, window.innerWidth / (window.innerHeight / 2), 0.5, 2000);
 
@@ -44,6 +44,7 @@ class Game {
 
     this.keys = {};
     this.setupInputs();
+    this.setupMobileControls();
 
     this.track = null;
     this.player1 = null;
@@ -66,9 +67,56 @@ class Game {
 
     this.setupUI();
     this.setupWindowEvents();
+    this.scaleGame();
 
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
+  }
+
+  scaleGame() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    if (this.screenElement) {
+      this.screenElement.style.transform = 'none';
+    }
+
+    if (this.renderer) {
+      this.renderer.setSize(w, h);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    }
+
+    if (this.cameraP1 && this.cameraP2) {
+      if (this.mode === 'TWO_PLAYER') {
+        this.cameraP1.aspect = w / (h / 2);
+        this.cameraP2.aspect = w / (h / 2);
+      } else {
+        this.cameraP1.aspect = w / h;
+      }
+      this.cameraP1.updateProjectionMatrix();
+      this.cameraP2.updateProjectionMatrix();
+    }
+  }
+
+  toggleFullscreen() {
+    const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!isFull) {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      }
+      document.body.classList.add('mobile-mode');
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+      document.body.classList.remove('mobile-mode');
+    }
+    setTimeout(() => this.scaleGame(), 100);
   }
 
   setupInputs() {
@@ -83,22 +131,53 @@ class Game {
     });
   }
 
-  setupWindowEvents() {
-    window.addEventListener('resize', () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      this.renderer.setSize(w, h);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  setupMobileControls() {
+    const mobileLeft = document.getElementById('mobile-left');
+    const mobileRight = document.getElementById('mobile-right');
+    const mobileUp = document.getElementById('mobile-up');
+    const mobileDown = document.getElementById('mobile-down');
+    const mobileTurbo = document.getElementById('mobile-turbo');
 
-      if (this.mode === 'TWO_PLAYER') {
-        this.cameraP1.aspect = w / (h / 2);
-        this.cameraP2.aspect = w / (h / 2);
-      } else {
-        this.cameraP1.aspect = w / h;
-      }
-      this.cameraP1.updateProjectionMatrix();
-      this.cameraP2.updateProjectionMatrix();
-    });
+    const bindButton = (element, keyCodes) => {
+      if (!element) return;
+      const press = (e) => {
+        if (e.cancelable) e.preventDefault();
+        if (window.ATR.Audio && !window.ATR.Audio.isStarted) {
+          window.ATR.Audio.init();
+        }
+        keyCodes.forEach(code => { this.keys[code] = true; });
+      };
+      const release = (e) => {
+        if (e.cancelable) e.preventDefault();
+        keyCodes.forEach(code => { this.keys[code] = false; });
+      };
+
+      element.addEventListener('touchstart', press, { passive: false });
+      element.addEventListener('touchend', release, { passive: false });
+      element.addEventListener('touchcancel', release, { passive: false });
+
+      element.addEventListener('mousedown', press);
+      element.addEventListener('mouseup', release);
+      element.addEventListener('mouseleave', (e) => {
+        if (e.buttons === 1) release(e);
+      });
+    };
+
+    bindButton(mobileLeft, ['ArrowLeft', 'KeyA']);
+    bindButton(mobileRight, ['ArrowRight', 'KeyD']);
+    bindButton(mobileUp, ['ArrowUp', 'KeyW']);
+    bindButton(mobileDown, ['ArrowDown', 'KeyS']);
+    bindButton(mobileTurbo, ['ShiftRight', 'Space']);
+  }
+
+  setupWindowEvents() {
+    const onResize = () => {
+      this.scaleGame();
+    };
+
+    window.addEventListener('resize', onResize);
+    window.addEventListener('fullscreenchange', onResize);
+    window.addEventListener('webkitfullscreenchange', onResize);
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -110,6 +189,16 @@ class Game {
   }
 
   setupUI() {
+    const mobileBtn = document.getElementById('mobile-btn');
+    if (mobileBtn) {
+      mobileBtn.onclick = () => {
+        if (window.ATR.Audio && !window.ATR.Audio.isStarted) {
+          window.ATR.Audio.init();
+        }
+        this.toggleFullscreen();
+      };
+    }
+
     document.getElementById('btn-single-player').onclick = () => this.startRace('SINGLE');
     document.getElementById('btn-two-player').onclick = () => this.startRace('TWO_PLAYER');
     document.getElementById('btn-practice').onclick = () => this.startRace('PRACTICE');
@@ -242,6 +331,7 @@ class Game {
 
     window.ATR.Audio.startEngines(isSplit);
     this.runCountdown();
+    this.scaleGame();
   }
 
   snapCameraToCar(camera, car) {
@@ -429,7 +519,7 @@ class Game {
     const ctx = this.minimapCtx;
     const w = this.minimapCanvas.width;
     const h = this.minimapCanvas.height;
-    const pad = 14;
+    const pad = 12;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -453,13 +543,13 @@ class Game {
     ctx.closePath();
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
 
     ctx.strokeStyle = 'rgba(70, 160, 240, 0.75)';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     // 2. Start/Finish Line Indicator
@@ -484,10 +574,10 @@ class Game {
       const p2Pos = toMap(this.player2.mesh.position.x, this.player2.mesh.position.z);
       ctx.fillStyle = '#00c3ff';
       ctx.beginPath();
-      ctx.arc(p2Pos.x, p2Pos.y, 4, 0, Math.PI * 2);
+      ctx.arc(p2Pos.x, p2Pos.y, 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
     }
 
@@ -496,10 +586,10 @@ class Game {
       const p1Pos = toMap(this.player1.mesh.position.x, this.player1.mesh.position.z);
       ctx.fillStyle = '#ff2244';
       ctx.beginPath();
-      ctx.arc(p1Pos.x, p1Pos.y, 4.5, 0, Math.PI * 2);
+      ctx.arc(p1Pos.x, p1Pos.y, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
     }
   }
@@ -612,7 +702,7 @@ class Game {
 
       this.renderer.setScissorTest(false);
     } else {
-      // Fullscreen Single Player
+      // Fullscreen Single Player matching full browser dimensions
       this.renderer.setViewport(0, 0, width, height);
       this.renderer.setScissorTest(false);
       this.updateCamera(this.cameraP1, this.player1, width / height, delta);

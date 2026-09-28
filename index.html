@@ -2,207 +2,229 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <!-- Mobile Viewport Lock -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AMIGA TURBO RACER</title>
   <link rel="stylesheet" href="style.css">
   <!-- Three.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <!-- WebGL Canvas Container -->
+
+  <!-- Fullscreen / Mobile Mode Toggle Button (Top-Left, above all UI) -->
+  <button id="mobile-btn">📱 FULLSCREEN / MOBILE</button>
+
+  <!-- Scaled Game Container Wrapper -->
   <div id="game-container">
-    <canvas id="game-canvas"></canvas>
-    <div id="crt-overlay"></div>
-  </div>
+    <!-- Fixed Internal Resolution (960x720) Scaled to Screen -->
+    <div id="screen">
+      <div id="game-area">
+        <canvas id="game-canvas"></canvas>
+        <div id="crt-overlay"></div>
 
-  <!-- Horizontal Split-Screen Divider -->
-  <div id="split-divider" class="hidden">
-    <div class="divider-line"></div>
-    <div class="divider-badge">SPLIT DUAL RACE</div>
-    <div class="divider-line"></div>
-  </div>
-
-  <!-- Player 1 HUD -->
-  <div id="hud-p1" class="hud-layer hidden">
-    <div class="hud-top-left">
-      <div class="hud-player-tag p1-tag">P1</div>
-      <div class="hud-box">
-        <span class="hud-label">POS</span>
-        <span id="p1-pos" class="hud-value neon-yellow">01/20</span>
-      </div>
-      <div class="hud-box">
-        <span class="hud-label">LAP</span>
-        <span id="p1-lap" class="hud-value neon-white">1/3</span>
-      </div>
-      <div class="hud-box">
-        <span class="hud-label">TIME</span>
-        <span id="p1-time" class="hud-value neon-cyan">00:00.00</span>
-      </div>
-    </div>
-    <div class="hud-top-right">
-      <div class="hud-bar-group">
-        <span class="hud-label">FUEL</span>
-        <div class="hud-bar-frame">
-          <div id="p1-fuel-bar" class="hud-bar-fill fuel-fill"></div>
+        <!-- Horizontal Split-Screen Divider -->
+        <div id="split-divider" class="hidden">
+          <div class="divider-line"></div>
+          <div class="divider-badge">SPLIT DUAL RACE</div>
+          <div class="divider-line"></div>
         </div>
-      </div>
-      <div class="hud-bar-group">
-        <span class="hud-label">TURBO</span>
-        <div class="hud-bar-frame">
-          <div id="p1-turbo-bar" class="hud-bar-fill turbo-fill"></div>
+
+        <!-- Player 1 HUD -->
+        <div id="hud-p1" class="hud-layer hidden">
+          <div class="hud-top-left">
+            <div class="hud-player-tag p1-tag">P1</div>
+            <div class="hud-box">
+              <span class="hud-label">POS</span>
+              <span id="p1-pos" class="hud-value neon-yellow">01/20</span>
+            </div>
+            <div class="hud-box">
+              <span class="hud-label">LAP</span>
+              <span id="p1-lap" class="hud-value neon-white">1/3</span>
+            </div>
+            <div class="hud-box">
+              <span class="hud-label">TIME</span>
+              <span id="p1-time" class="hud-value neon-cyan">00:00.00</span>
+            </div>
+          </div>
+          <div class="hud-top-right">
+            <div class="hud-bar-group">
+              <span class="hud-label">FUEL</span>
+              <div class="hud-bar-frame">
+                <div id="p1-fuel-bar" class="hud-bar-fill fuel-fill"></div>
+              </div>
+            </div>
+            <div class="hud-bar-group">
+              <span class="hud-label">TURBO</span>
+              <div class="hud-bar-frame">
+                <div id="p1-turbo-bar" class="hud-bar-fill turbo-fill"></div>
+              </div>
+            </div>
+            <div class="hud-speedometer">
+              <span id="p1-speed" class="speed-digits">000</span>
+              <span class="speed-unit">KM/H</span>
+            </div>
+          </div>
+          <div id="p1-pit-msg" class="hud-center-msg hidden">PIT REFUELING...</div>
         </div>
-      </div>
-      <div class="hud-speedometer">
-        <span id="p1-speed" class="speed-digits">000</span>
-        <span class="speed-unit">KM/H</span>
-      </div>
-    </div>
-    <div id="p1-pit-msg" class="hud-center-msg hidden">PIT REFUELING...</div>
-  </div>
 
-  <!-- Player 2 HUD -->
-  <div id="hud-p2" class="hud-layer hud-p2 hidden">
-    <div class="hud-top-left">
-      <div class="hud-player-tag p2-tag">P2</div>
-      <div class="hud-box">
-        <span class="hud-label">POS</span>
-        <span id="p2-pos" class="hud-value neon-yellow">02/20</span>
-      </div>
-      <div class="hud-box">
-        <span class="hud-label">LAP</span>
-        <span id="p2-lap" class="hud-value neon-white">1/3</span>
-      </div>
-      <div class="hud-box">
-        <span class="hud-label">TIME</span>
-        <span id="p2-time" class="hud-value neon-cyan">00:00.00</span>
-      </div>
-    </div>
-    <div class="hud-top-right">
-      <div class="hud-bar-group">
-        <span class="hud-label">FUEL</span>
-        <div class="hud-bar-frame">
-          <div id="p2-fuel-bar" class="hud-bar-fill fuel-fill"></div>
+        <!-- Player 2 HUD -->
+        <div id="hud-p2" class="hud-layer hud-p2 hidden">
+          <div class="hud-top-left">
+            <div class="hud-player-tag p2-tag">P2</div>
+            <div class="hud-box">
+              <span class="hud-label">POS</span>
+              <span id="p2-pos" class="hud-value neon-yellow">02/20</span>
+            </div>
+            <div class="hud-box">
+              <span class="hud-label">LAP</span>
+              <span id="p2-lap" class="hud-value neon-white">1/3</span>
+            </div>
+            <div class="hud-box">
+              <span class="hud-label">TIME</span>
+              <span id="p2-time" class="hud-value neon-cyan">00:00.00</span>
+            </div>
+          </div>
+          <div class="hud-top-right">
+            <div class="hud-bar-group">
+              <span class="hud-label">FUEL</span>
+              <div class="hud-bar-frame">
+                <div id="p2-fuel-bar" class="hud-bar-fill fuel-fill"></div>
+              </div>
+            </div>
+            <div class="hud-bar-group">
+              <span class="hud-label">TURBO</span>
+              <div class="hud-bar-frame">
+                <div id="p2-turbo-bar" class="hud-bar-fill turbo-fill"></div>
+              </div>
+            </div>
+            <div class="hud-speedometer">
+              <span id="p2-speed" class="speed-digits">000</span>
+              <span class="speed-unit">KM/H</span>
+            </div>
+          </div>
+          <div id="p2-pit-msg" class="hud-center-msg hidden">PIT REFUELING...</div>
         </div>
-      </div>
-      <div class="hud-bar-group">
-        <span class="hud-label">TURBO</span>
-        <div class="hud-bar-frame">
-          <div id="p2-turbo-bar" class="hud-bar-fill turbo-fill"></div>
+
+        <!-- Minimap (Bottom-Left Corner) -->
+        <div id="minimap-container" class="hidden">
+          <canvas id="minimap-canvas" width="140" height="140"></canvas>
         </div>
-      </div>
-      <div class="hud-speedometer">
-        <span id="p2-speed" class="speed-digits">000</span>
-        <span class="speed-unit">KM/H</span>
+
+        <!-- Countdown Overlay -->
+        <div id="countdown-banner" class="hidden">
+          <span id="countdown-text">3</span>
+        </div>
+
+        <!-- Controls Hints Overlay -->
+        <div id="controls-hint" class="hidden">
+          <div class="hint-card">
+            <div class="hint-title p1-color">PLAYER 1</div>
+            <p>ARROWS / TOUCH = DRIVE</p>
+            <p>R-SHIFT / ⚡ = TURBO</p>
+          </div>
+          <div id="hint-p2-card" class="hint-card hidden">
+            <div class="hint-title p2-color">PLAYER 2</div>
+            <p>W A S D = DRIVE</p>
+            <p>SPACE = TURBO</p>
+          </div>
+        </div>
+
+        <!-- Main Menu Overlay -->
+        <div id="main-menu" class="menu-screen">
+          <div class="menu-content">
+            <div class="retro-header">
+              <h1 class="glitch-title">AMIGA TURBO RACER</h1>
+              <p class="retro-subtitle">ARCADE &bull; LOW-POLY &bull; SPLIT-SCREEN</p>
+            </div>
+
+            <div class="seed-badge">
+              TRACK SEED: <span id="menu-seed-display">849271</span>
+            </div>
+
+            <div class="menu-buttons">
+              <button id="btn-single-player" class="retro-btn btn-primary">START SINGLE PLAYER</button>
+              <button id="btn-two-player" class="retro-btn btn-secondary">START 2 PLAYER SPLIT SCREEN</button>
+              <button id="btn-random-track" class="retro-btn">NEW RANDOM TRACK</button>
+              <button id="btn-practice" class="retro-btn">PRACTICE MODE</button>
+              <button id="btn-options" class="retro-btn">OPTIONS</button>
+            </div>
+
+            <div class="menu-footer">
+              <span>© 1993-2026 RETRO MOTORS AMIGA TRIBUTE</span>
+              <span id="audio-status-tag">CLICK ANYWHERE FOR AUDIO</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Options Screen Overlay -->
+        <div id="options-menu" class="menu-screen hidden">
+          <div class="menu-content">
+            <h2>RACE CONFIGURATION</h2>
+            <div class="option-row">
+              <label>QUALITY LEVEL:</label>
+              <select id="opt-quality" class="retro-select">
+                <option value="HIGH" selected>HIGH (Full Scenery)</option>
+                <option value="MEDIUM">MEDIUM (Balanced)</option>
+                <option value="LOW">LOW (Fastest)</option>
+              </select>
+            </div>
+            <div class="option-row">
+              <label>ENVIRONMENT:</label>
+              <select id="opt-env" class="retro-select">
+                <option value="FOREST" selected>Forest Green</option>
+                <option value="DESERT">Desert Sun</option>
+                <option value="MOUNTAIN">Alpine Peak</option>
+                <option value="SNOW">Snow Ridge</option>
+                <option value="NIGHT">Midnight Run</option>
+              </select>
+            </div>
+            <div class="option-row">
+              <label>LAPS:</label>
+              <select id="opt-laps" class="retro-select">
+                <option value="2">2 Laps</option>
+                <option value="3" selected>3 Laps</option>
+                <option value="5">5 Laps</option>
+              </select>
+            </div>
+            <div class="option-row">
+              <label>SOUND VOLUME:</label>
+              <input type="range" id="opt-volume" min="0" max="100" value="80" class="retro-slider">
+            </div>
+            <div class="option-row">
+              <label>CAMERA SHAKE:</label>
+              <input type="checkbox" id="opt-shake" checked>
+            </div>
+            <button id="btn-options-back" class="retro-btn btn-primary" style="margin-top:16px;">BACK TO MENU</button>
+          </div>
+        </div>
+
+        <!-- Results Screen Overlay -->
+        <div id="results-screen" class="menu-screen hidden">
+          <div class="menu-content">
+            <h2 id="results-title" class="neon-yellow">RACE FINISHED!</h2>
+            <div id="results-board" class="results-table"></div>
+            <div class="menu-buttons" style="margin-top: 20px;">
+              <button id="btn-results-retry" class="retro-btn btn-primary">REMATCH</button>
+              <button id="btn-results-new" class="retro-btn btn-secondary">NEW RANDOM TRACK</button>
+              <button id="btn-results-menu" class="retro-btn">MAIN MENU</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
-    <div id="p2-pit-msg" class="hud-center-msg hidden">PIT REFUELING...</div>
   </div>
 
-  <!-- Minimap (Bottom-Left Corner) -->
-  <div id="minimap-container" class="hidden">
-    <canvas id="minimap-canvas" width="160" height="160"></canvas>
-  </div>
-
-  <!-- Big Countdown Banner -->
-  <div id="countdown-banner" class="hidden">
-    <span id="countdown-text">3</span>
-  </div>
-
-  <!-- Controls Hints Overlay -->
-  <div id="controls-hint" class="hidden">
-    <div class="hint-card">
-      <div class="hint-title p1-color">PLAYER 1</div>
-      <p>ARROWS = DRIVE</p>
-      <p>R-SHIFT = TURBO</p>
-      <p>GAMEPAD 1 = READY</p>
+  <!-- Mobile Touch Controls Overlay (Left/Right Steering, Gas, Brake, Turbo) -->
+  <div id="mobile-controls">
+    <div id="mobile-dpad">
+      <button id="mobile-left" class="mobile-control-btn">◀</button>
+      <button id="mobile-right" class="mobile-control-btn">▶</button>
     </div>
-    <div id="hint-p2-card" class="hint-card hidden">
-      <div class="hint-title p2-color">PLAYER 2</div>
-      <p>W A S D = DRIVE</p>
-      <p>SPACE / E = TURBO</p>
-      <p>GAMEPAD 2 = READY</p>
-    </div>
-  </div>
-
-  <!-- Main Menu Overlay -->
-  <div id="main-menu" class="menu-screen">
-    <div class="menu-content">
-      <div class="retro-header">
-        <h1 class="glitch-title">AMIGA TURBO RACER</h1>
-        <p class="retro-subtitle">FAST &bull; LOW-POLY &bull; SPLIT-SCREEN</p>
-      </div>
-
-      <div class="seed-badge">
-        TRACK SEED: <span id="menu-seed-display">849271</span>
-      </div>
-
-      <div class="menu-buttons">
-        <button id="btn-single-player" class="retro-btn btn-primary">START SINGLE PLAYER</button>
-        <button id="btn-two-player" class="retro-btn btn-secondary">START 2 PLAYER SPLIT SCREEN</button>
-        <button id="btn-random-track" class="retro-btn">NEW RANDOM TRACK</button>
-        <button id="btn-practice" class="retro-btn">PRACTICE MODE</button>
-        <button id="btn-options" class="retro-btn">OPTIONS</button>
-      </div>
-
-      <div class="menu-footer">
-        <span>© 1993-2026 RETRO MOTORS AMIGA TRIBUTE</span>
-        <span id="audio-status-tag">CLICK ANYWHERE FOR AUDIO</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Options Screen Overlay -->
-  <div id="options-menu" class="menu-screen hidden">
-    <div class="menu-content">
-      <h2>RACE CONFIGURATION</h2>
-      <div class="option-row">
-        <label>QUALITY LEVEL:</label>
-        <select id="opt-quality" class="retro-select">
-          <option value="HIGH" selected>HIGH (Full Scenery)</option>
-          <option value="MEDIUM">MEDIUM (Balanced)</option>
-          <option value="LOW">LOW (Fastest)</option>
-        </select>
-      </div>
-      <div class="option-row">
-        <label>ENVIRONMENT:</label>
-        <select id="opt-env" class="retro-select">
-          <option value="FOREST" selected>Forest Green</option>
-          <option value="DESERT">Desert Sun</option>
-          <option value="MOUNTAIN">Alpine Peak</option>
-          <option value="SNOW">Snow Ridge</option>
-          <option value="NIGHT">Midnight Run</option>
-        </select>
-      </div>
-      <div class="option-row">
-        <label>LAPS:</label>
-        <select id="opt-laps" class="retro-select">
-          <option value="2">2 Laps</option>
-          <option value="3" selected>3 Laps</option>
-          <option value="5">5 Laps</option>
-        </select>
-      </div>
-      <div class="option-row">
-        <label>SOUND VOLUME:</label>
-        <input type="range" id="opt-volume" min="0" max="100" value="80" class="retro-slider">
-      </div>
-      <div class="option-row">
-        <label>CAMERA SHAKE:</label>
-        <input type="checkbox" id="opt-shake" checked>
-      </div>
-      <button id="btn-options-back" class="retro-btn btn-primary" style="margin-top:20px;">BACK TO MENU</button>
-    </div>
-  </div>
-
-  <!-- Results Screen Overlay -->
-  <div id="results-screen" class="menu-screen hidden">
-    <div class="menu-content">
-      <h2 id="results-title" class="neon-yellow">RACE FINISHED!</h2>
-      <div id="results-board" class="results-table"></div>
-      <div class="menu-buttons" style="margin-top: 25px;">
-        <button id="btn-results-retry" class="retro-btn btn-primary">REMATCH</button>
-        <button id="btn-results-new" class="retro-btn btn-secondary">NEW RANDOM TRACK</button>
-        <button id="btn-results-menu" class="retro-btn">MAIN MENU</button>
-      </div>
+    <div id="mobile-action">
+      <button id="mobile-turbo" class="mobile-control-btn btn-turbo">⚡</button>
+      <button id="mobile-down" class="mobile-control-btn btn-brake">▼</button>
+      <button id="mobile-up" class="mobile-control-btn btn-gas">▲</button>
     </div>
   </div>
 
