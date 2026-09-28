@@ -16,7 +16,7 @@
 
   <!-- Scaled Game Container Wrapper -->
   <div id="game-container">
-    <!-- Fixed Internal Resolution (960x720) Scaled to Screen -->
+    <!-- Screen Viewport Wrapper -->
     <div id="screen">
       <div id="game-area">
         <canvas id="game-canvas"></canvas>
@@ -105,9 +105,9 @@
           <div id="p2-pit-msg" class="hud-center-msg hidden">PIT REFUELING...</div>
         </div>
 
-        <!-- Minimap (Bottom-Left Corner) -->
+        <!-- Minimap (Bottom-Right Corner, 2x Size) -->
         <div id="minimap-container" class="hidden">
-          <canvas id="minimap-canvas" width="140" height="140"></canvas>
+          <canvas id="minimap-canvas" width="280" height="280"></canvas>
         </div>
 
         <!-- Countdown Overlay -->
