@@ -55,8 +55,12 @@ class Game {
     this.shakeIntensity = 0;
     this.smokeSystem = null;
 
-    // Minimap references
+    // Minimap references (doubled buffer resolution for 2x crispness)
     this.minimapCanvas = document.getElementById('minimap-canvas');
+    if (this.minimapCanvas) {
+      this.minimapCanvas.width = 560;
+      this.minimapCanvas.height = 560;
+    }
     this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
     this.minimapBounds = null;
     this.minimapTrackPoints = null;
@@ -515,7 +519,16 @@ class Game {
     camera.lookAt(lookTarget);
 
     const speedRatio = car.speed / car.maxSpeed;
-    camera.fov = 70 + speedRatio * 12.0;
+
+    // Dynamically balance FOV so the track doesn't look zoomed-in on mobile aspects
+    let baseFov = 70;
+    if (aspect < 1.0) {
+      baseFov = 92; // Mobile portrait
+    } else if (aspect < 1.45) {
+      baseFov = 78; // Compact/tablet screens
+    }
+
+    camera.fov = baseFov + speedRatio * 10.0;
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
   }
@@ -591,7 +604,7 @@ class Game {
     const ctx = this.minimapCtx;
     const w = this.minimapCanvas.width;
     const h = this.minimapCanvas.height;
-    const pad = 20;
+    const pad = 36; // Scaled proportionally for 560x560 canvas
 
     ctx.clearRect(0, 0, w, h);
 
@@ -604,7 +617,7 @@ class Game {
       y: pad + ((z - minZ) / spanZ) * (h - pad * 2)
     });
 
-    // 1. Draw Track Ribbon
+    // 1. Draw Track Ribbon (Scaled 2x for 560x560)
     ctx.beginPath();
     const first = toMap(this.minimapTrackPoints[0].x, this.minimapTrackPoints[0].z);
     ctx.moveTo(first.x, first.y);
@@ -614,30 +627,30 @@ class Game {
     }
     ctx.closePath();
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 10;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = 16;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(70, 160, 240, 0.8)';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(70, 160, 240, 0.85)';
+    ctx.lineWidth = 7;
     ctx.stroke();
 
     // 2. Start/Finish Line Indicator
     const finishPos = toMap(this.track.spline.getPointAt(0.01).x, this.track.spline.getPointAt(0.01).z);
     ctx.fillStyle = '#ff0055';
     ctx.beginPath();
-    ctx.arc(finishPos.x, finishPos.y, 5, 0, Math.PI * 2);
+    ctx.arc(finishPos.x, finishPos.y, 9, 0, Math.PI * 2);
     ctx.fill();
 
     // 3. AI Racers
     for (let i = 0; i < this.aiCars.length; i++) {
       const car = this.aiCars[i].car;
       const pos = toMap(car.mesh.position.x, car.mesh.position.z);
-      ctx.fillStyle = 'rgba(210, 220, 230, 0.75)';
+      ctx.fillStyle = 'rgba(210, 220, 230, 0.85)';
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 3.5, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, 6.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -646,10 +659,10 @@ class Game {
       const p2Pos = toMap(this.player2.mesh.position.x, this.player2.mesh.position.z);
       ctx.fillStyle = '#00c3ff';
       ctx.beginPath();
-      ctx.arc(p2Pos.x, p2Pos.y, 6.5, 0, Math.PI * 2);
+      ctx.arc(p2Pos.x, p2Pos.y, 11, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
     }
 
@@ -658,10 +671,10 @@ class Game {
       const p1Pos = toMap(this.player1.mesh.position.x, this.player1.mesh.position.z);
       ctx.fillStyle = '#ff2244';
       ctx.beginPath();
-      ctx.arc(p1Pos.x, p1Pos.y, 7.5, 0, Math.PI * 2);
+      ctx.arc(p1Pos.x, p1Pos.y, 13, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
     }
   }
