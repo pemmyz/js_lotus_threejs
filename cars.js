@@ -2,7 +2,7 @@
    AMIGA TURBO RACER - PROCEDURAL CARS & VEHICLE PHYSICS
    Constructs 1990s wedge-shaped supercars with pop-up
    headlights, spoilers, shadows, and arcade physics
-   supporting human players and 19 competing AI racers.
+   supporting human players and competing AI racers.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -10,7 +10,7 @@ window.ATR = window.ATR || {};
 /* ===================================================
    SMOKE PARTICLE SYSTEM
    High-performance pooled billboard particle system.
-   Supports tire skid smoke and exhaust smoke trails.
+   Supports tire skid smoke, exhaust, and collision sparks.
    =================================================== */
 class SmokeParticleSystem {
   constructor(scene) {
@@ -19,7 +19,6 @@ class SmokeParticleSystem {
     this.particles = [];
     this.poolIndex = 0;
 
-    // Procedural soft-radial smoke puff texture
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
@@ -100,7 +99,6 @@ class SmokeParticleSystem {
       }
 
       const progress = p.life / p.maxLife;
-
       p.pos.addScaledVector(p.vel, delta);
       p.sprite.position.copy(p.pos);
 
@@ -133,7 +131,7 @@ class CarModelFactory {
     chassis.position.y = 0.5;
     carGroup.add(chassis);
 
-    // Sloped Nose (Front of car points to -Z)
+    // Sloped Nose
     const noseGeo = new THREE.BufferGeometry();
     const noseVertices = new Float32Array([
       -1.1, 0.2, -2.2,   1.1, 0.2, -2.2,   1.1, 0.6, -1.2,
@@ -150,7 +148,7 @@ class CarModelFactory {
     roof.position.set(0, 0.95, -0.2);
     carGroup.add(roof);
 
-    // Rear Spoiler (Back of car at +Z)
+    // Rear Spoiler
     const spoilerMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.4 });
     const wing = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.1, 0.5), spoilerMat);
     wing.position.set(0, 1.15, 2.0);
@@ -161,14 +159,14 @@ class CarModelFactory {
     post2.position.set(0.9, 0.95, 2.0);
     carGroup.add(wing, post1, post2);
 
-    // Front Headlights (-Z)
+    // Front Headlights
     const headMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const headL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.1), headMat);
     const headR = headL.clone();
     headL.position.set(-0.7, 0.62, -2.15);
     headR.position.set(0.7, 0.62, -2.15);
 
-    // Rear Tail Lights (+Z)
+    // Rear Tail Lights
     const tailMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
     const tailL = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.15, 0.1), tailMat);
     const tailR = tailL.clone();
@@ -215,9 +213,8 @@ class Car {
     this.playerNum = options.playerNum || 1;
     this.color = options.color || 0xe62222;
 
-    // Fast Lotus-Era Arcade Physics
     this.speed = 0;
-    this.maxSpeed = options.maxSpeed || 265.0; // Fast arcade supercar speed (KM/H)
+    this.maxSpeed = options.maxSpeed || 265.0; // KM/H
     this.accel = options.accel || 65.0;
     this.braking = 90.0;
     this.drag = 0.992;
@@ -230,10 +227,13 @@ class Car {
     this.finished = false;
     this.totalRaceDistance = 0;
 
-    // Lap timing properties
+    // Lap timing
     this.currentLapTime = 0;
     this.lastLapTime = 0;
     this.bestLapTime = null;
+
+    // Collision cooldown timer
+    this.collisionCooldown = 0;
 
     this.fuel = 100.0;
     this.turbo = 100.0;
@@ -246,11 +246,9 @@ class Car {
     this.hazardCooldown = 0;
     this.offRoad = false;
 
-    // Visual steering angle state
     this.steerAngle = 0;
     this.steerYaw = 0;
 
-    // Smoke emission timers
     this.tireSmokeTimer = 0;
     this.exhaustTimer = 0;
 
@@ -261,6 +259,9 @@ class Car {
   updatePhysics(delta, track) {
     if (this.hazardCooldown > 0) {
       this.hazardCooldown -= delta;
+    }
+    if (this.collisionCooldown > 0) {
+      this.collisionCooldown -= delta;
     }
 
     if (this.altitude > 0 || this.verticalVelocity !== 0) {
@@ -288,7 +289,7 @@ class Car {
     // Turbo boost allows exceeding standard top speed
     if (this.isTurboActive && this.turbo > 0) {
       this.turbo -= 24 * delta;
-      this.speed = Math.min(this.speed + this.accel * 1.6 * delta, this.maxSpeed * 1.22); // Reaches ~323 KM/H
+      this.speed = Math.min(this.speed + this.accel * 1.6 * delta, this.maxSpeed * 1.22);
       if (this.turbo <= 0) this.isTurboActive = false;
     } else {
       this.turbo = Math.min(100, this.turbo + 4.5 * delta);
@@ -310,21 +311,15 @@ class Car {
     const worldPos = roadInfo.center.clone().addScaledVector(roadInfo.normal, this.laneOffset * roadHalfWidth);
 
     if (this.slipTime <= 0) {
-      // Smoothly interpolate visual steering yaw and return toward center
       this.steerYaw = THREE.MathUtils.lerp(this.steerYaw || 0, this.steerAngle || 0, delta * 12);
       this.steerAngle = 0;
 
-      // Inverted so rear swings outward (Right when steering Left, Left when steering Right)
       const swingOffset = -this.steerYaw * 0.45;
       const frontOffset = 1.6;
 
-      // Anchor front of car to the road line
       const frontPoint = worldPos.clone().addScaledVector(roadInfo.tangent, frontOffset);
-
-      // Swing the rear outward to the opposite side
       const rearDir = roadInfo.tangent.clone().negate().addScaledVector(roadInfo.normal, swingOffset).normalize();
 
-      // Position car so the front stays anchored while the rear swings
       this.mesh.position.copy(frontPoint).addScaledVector(rearDir, frontOffset);
       this.mesh.position.y += this.altitude + 0.05;
 
@@ -342,16 +337,14 @@ class Car {
   updateSmoke(delta, roadInfo) {
     if (!window.ATR.smokeSystem) return;
 
-    // Limit smoke generation for far-away AI cars to preserve high frame rates
     if (!this.isPlayer && window.gameApp && window.gameApp.player1) {
       const distSq = this.mesh.position.distanceToSquared(window.gameApp.player1.mesh.position);
       if (distSq > 140 * 140) return;
     }
 
-    // Refresh world matrix so localToWorld accurately reflects current orientation & swing
     this.mesh.updateMatrixWorld(true);
 
-    // 1. REAR WHEEL TIRE SMOKE WHEN TURNING
+    // 1. REAR WHEEL TIRE SMOKE
     const isTurning = Math.abs(this.steerYaw) > 0.08 || this.slipTime > 0;
     if (isTurning && this.speed > 8) {
       this.tireSmokeTimer += delta;
@@ -361,13 +354,10 @@ class Car {
       if (this.tireSmokeTimer >= interval) {
         this.tireSmokeTimer = 0;
 
-        // Both rear wheel contact patches: local X = -1.15 / 1.15, Y = 0.18, Z = 1.3
         const leftWheelPos = this.mesh.localToWorld(new THREE.Vector3(-1.15, 0.18, 1.3));
         const rightWheelPos = this.mesh.localToWorld(new THREE.Vector3(1.15, 0.18, 1.3));
-
         const rearDrift = roadInfo.tangent.clone().multiplyScalar(-this.speed * 0.07);
 
-        // Left rear tire puff
         window.ATR.smokeSystem.emit({
           position: leftWheelPos.add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.5) * 0.2)),
           velocity: new THREE.Vector3(
@@ -383,7 +373,6 @@ class Car {
           rotSpeed: (Math.random() - 0.5) * 2.5
         });
 
-        // Right rear tire puff
         window.ATR.smokeSystem.emit({
           position: rightWheelPos.add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.5) * 0.2)),
           velocity: new THREE.Vector3(
@@ -401,7 +390,7 @@ class Car {
       }
     }
 
-    // 2. EXHAUST SMOKE (STANDING STILL & WHILE MOVING)
+    // 2. EXHAUST SMOKE
     this.exhaustTimer += delta;
     const isStanding = this.speed < 4.0;
     const exhaustInterval = isStanding ? 0.13 : Math.max(0.025, 0.08 - (this.speed / this.maxSpeed) * 0.05);
@@ -409,12 +398,10 @@ class Car {
     if (this.exhaustTimer >= exhaustInterval) {
       this.exhaustTimer = 0;
 
-      // Twin exhaust pipes at rear bumper: local X = -0.45 or +0.45, Y = 0.35, Z = 2.25
       const pipeX = (Math.random() > 0.5 ? -0.45 : 0.45);
       const pipeWorld = this.mesh.localToWorld(new THREE.Vector3(pipeX, 0.32, 2.25));
 
       if (isStanding) {
-        // Idle exhaust rising softly
         window.ATR.smokeSystem.emit({
           position: pipeWorld,
           velocity: new THREE.Vector3(
@@ -430,7 +417,6 @@ class Car {
           rotSpeed: (Math.random() - 0.5) * 1.5
         });
       } else {
-        // Driving exhaust smoke stream behind car
         const backwardSpeed = Math.min(8.0, this.speed * 0.09);
         const exhaustBack = roadInfo.tangent.clone().multiplyScalar(-backwardSpeed);
 
@@ -482,12 +468,11 @@ class Car {
     const slipFactor = this.slipTime > 0 ? 0.25 : 1.0;
     this.laneOffset += amount * this.steeringSensitivity * slipFactor * delta;
     this.laneOffset = Math.max(-1.3, Math.min(1.3, this.laneOffset));
-    this.steerAngle = amount; // Track turning input
+    this.steerAngle = amount;
   }
 
   accelerate(delta) {
     if (this.fuel <= 0) return;
-    // Progressive power band: quick initial launch, gradual top-end pull up to 265 KM/H
     const speedRatio = Math.min(1.0, this.speed / this.maxSpeed);
     const progressiveAccel = this.accel * (1.0 - Math.pow(speedRatio, 1.8) * 0.72);
     this.speed = Math.min(this.speed + progressiveAccel * delta, this.maxSpeed);
@@ -507,15 +492,14 @@ class Car {
   hitHazard(type) {
     if (type === 'OIL') {
       this.slipTime = 0.8;
-      if (window.ATR.Audio) window.ATR.Audio.playSkid();
+      if (this.isPlayer && window.ATR.Audio) window.ATR.Audio.playSkid();
     } else if (type === 'LOG' || type === 'ROCK') {
       if (this.hazardCooldown > 0) return;
       this.hazardCooldown = 0.9;
-      // Heavy arcade crash penalty and bounce
       this.speed = Math.max(0, this.speed * 0.28);
       this.verticalVelocity = 4.5;
       this.altitude = 0.3;
-      if (window.ATR.Audio) window.ATR.Audio.playCrash();
+      if (this.isPlayer && window.ATR.Audio) window.ATR.Audio.playCrash();
     }
   }
 }
@@ -527,7 +511,6 @@ class AIController {
     this.skill = skill;
     this.targetLane = car.laneOffset;
     this.laneChangeTimer = Math.random() * 3;
-    // High AI competitive speeds (225 - 265 KM/H)
     this.desiredSpeed = car.maxSpeed * (0.86 + Math.random() * 0.15);
   }
 
@@ -538,43 +521,82 @@ class AIController {
       this.car.speed *= 0.995;
     }
 
-    this.laneChangeTimer -= delta;
-    if (this.laneChangeTimer <= 0) {
-      this.laneChangeTimer = 2.0 + Math.random() * 3.5;
-      this.targetLane = (Math.random() * 1.4 - 0.7);
-    }
-
-    // AI Obstacle Avoidance for half-road blocks and logs
+    // 1. Predictive Obstacle Avoidance (Logs, Rocks, Oil Slicks)
+    let isAvoidingObstacle = false;
     if (this.track && this.track.obstacles) {
       for (let obs of this.track.obstacles) {
-        if (obs.type === 'LOG' || obs.type === 'ROCK') {
-          const dist = this.car.mesh.position.distanceTo(obs.position);
-          if (dist < 32.0) {
-            if (obs.side === -1 && this.targetLane < 0.2) {
-              this.targetLane = 0.6;
-            } else if (obs.side === 1 && this.targetLane > -0.2) {
-              this.targetLane = -0.6;
+        let dt = obs.t - this.car.trackT;
+        if (dt < -0.5) dt += 1.0;
+        if (dt > 0.5) dt -= 1.0;
+        const distAhead = dt * this.track.totalLength;
+
+        // Danger range: 4m to 65m ahead
+        if (distAhead > 4.0 && distAhead < 65.0) {
+          isAvoidingObstacle = true;
+
+          if (obs.type === 'LOG' || obs.type === 'ROCK') {
+            // Side -1 = left half blocked -> steer to right (+0.6), otherwise steer left (-0.6)
+            this.targetLane = obs.side === -1 ? 0.6 : -0.6;
+          } else if (obs.type === 'OIL') {
+            const roadInfo = this.track.getRoadTransformAt(obs.t);
+            const toObs = obs.position.clone().sub(roadInfo.center);
+            const oilSide = toObs.dot(roadInfo.normal) >= 0 ? 1 : -1;
+            this.targetLane = oilSide > 0 ? -0.65 : 0.65;
+          }
+
+          // Emergency brake if imminent collision path
+          const inHazardPath = (obs.side === -1 && this.car.laneOffset < 0.15) ||
+                               (obs.side === 1 && this.car.laneOffset > -0.15);
+          if (distAhead < 22.0 && inHazardPath) {
+            this.car.speed = Math.max(0, this.car.speed - 40.0 * delta);
+          }
+          break;
+        }
+      }
+    }
+
+    // 2. Predictive Car-to-Car Avoidance (dodge players and fellow AI)
+    if (!isAvoidingObstacle) {
+      for (let other of allCars) {
+        if (other === this.car) continue;
+
+        let dt = other.trackT - this.car.trackT;
+        if (dt < -0.5) dt += 1.0;
+        if (dt > 0.5) dt -= 1.0;
+        const distAhead = dt * this.track.totalLength;
+
+        // Vehicle is right ahead within passing/braking range
+        if (distAhead > 0.5 && distAhead < 24.0) {
+          const laneDiff = other.laneOffset - this.car.laneOffset;
+          if (Math.abs(laneDiff) < 0.45) {
+            // Veer toward whatever lane offers an open path
+            this.targetLane = other.laneOffset > 0
+              ? Math.max(-0.75, this.car.laneOffset - 0.55)
+              : Math.min(0.75, this.car.laneOffset + 0.55);
+
+            // Back off the throttle if closing in too quickly
+            if (distAhead < 10.0 && this.car.speed > other.speed) {
+              this.car.speed = Math.max(0, this.car.speed - 30.0 * delta);
             }
           }
         }
       }
     }
 
-    for (let other of allCars) {
-      if (other === this.car) continue;
-      const dist = this.car.mesh.position.distanceTo(other.mesh.position);
-      if (dist < 14.0) {
-        if (other.laneOffset > this.car.laneOffset) {
-          this.targetLane = Math.max(-0.75, this.car.laneOffset - 0.4);
-        } else {
-          this.targetLane = Math.min(0.75, this.car.laneOffset + 0.4);
-        }
+    // 3. Regular Lane Wandering
+    if (!isAvoidingObstacle) {
+      this.laneChangeTimer -= delta;
+      if (this.laneChangeTimer <= 0) {
+        this.laneChangeTimer = 2.0 + Math.random() * 3.5;
+        this.targetLane = (Math.random() * 1.4 - 0.7);
       }
     }
 
+    // 4. Steer toward target lane (sharper steering when dodging)
     const diff = this.targetLane - this.car.laneOffset;
     if (Math.abs(diff) > 0.05) {
-      this.car.steer(Math.sign(diff) * 0.85, delta);
+      const steerForce = isAvoidingObstacle ? 1.6 : 0.85;
+      this.car.steer(Math.sign(diff) * steerForce, delta);
     }
 
     this.car.updatePhysics(delta, this.track);

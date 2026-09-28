@@ -2,7 +2,7 @@
    AMIGA TURBO RACER - MAIN CONTROLLER & SPLIT ENGINE
    Handles Three.js rendering, horizontal split-screen,
    responsive full-window scaling, mobile touch controls,
-   camera shake, dynamic speed FOV, and game states.
+   car collisions, obstacle interactions, and HUD states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -40,6 +40,7 @@ class Game {
     this.seed = 849271;
     this.envType = 'FOREST';
     this.totalLaps = 3;
+    this.aiCount = 3; // Default 3 AI cars (4 total racers)
     this.clock = new THREE.Clock();
 
     this.keys = {};
@@ -199,6 +200,14 @@ class Game {
       };
     }
 
+    const aiSelect = document.getElementById('menu-ai-count');
+    if (aiSelect) {
+      this.aiCount = parseInt(aiSelect.value, 10);
+      aiSelect.addEventListener('change', (e) => {
+        this.aiCount = parseInt(e.target.value, 10);
+      });
+    }
+
     document.getElementById('btn-single-player').onclick = () => this.startRace('SINGLE');
     document.getElementById('btn-two-player').onclick = () => this.startRace('TWO_PLAYER');
     document.getElementById('btn-practice').onclick = () => this.startRace('PRACTICE');
@@ -258,7 +267,7 @@ class Game {
     this.allCars = [];
     this.aiCars = [];
 
-    // Initialize or clear particle system
+    // Clear / initialize particle system
     if (this.smokeSystem) {
       this.smokeSystem.clear();
     } else if (window.ATR.SmokeParticleSystem) {
@@ -266,13 +275,13 @@ class Game {
       window.ATR.smokeSystem = this.smokeSystem;
     }
 
-    // Generate Guaranteed Continuous Circuit
+    // Generate circuit
     const generator = new window.ATR.TrackGenerator();
     const trackData = generator.generate(this.seed, 'MEDIUM', this.envType, 50);
     this.track = new window.ATR.Track(this.scene, trackData);
     this.initMinimapTrack();
 
-    // Player 1 (Red Supercar) starts on Main Straight
+    // Player 1
     this.player1 = new window.ATR.Car(this.scene, {
       name: 'PLAYER 1',
       isPlayer: true,
@@ -283,7 +292,7 @@ class Game {
     });
     this.allCars.push(this.player1);
 
-    // Player 2 (Cyan Supercar)
+    // Player 2
     if (isSplit) {
       this.player2 = new window.ATR.Car(this.scene, {
         name: 'PLAYER 2',
@@ -298,12 +307,16 @@ class Game {
       this.player2 = null;
     }
 
-    // 19 AI Competitors lined up on starting grid
-    const aiCount = mode === 'PRACTICE' ? 0 : (isSplit ? 18 : 19);
+    // Configurable AI Competitors (Default 3)
+    const aiSelectEl = document.getElementById('menu-ai-count');
+    const selectedAi = aiSelectEl ? parseInt(aiSelectEl.value, 10) : this.aiCount;
+    const maxAi = isSplit ? Math.min(selectedAi, 18) : selectedAi;
+    const aiCount = mode === 'PRACTICE' ? 0 : maxAi;
+
     for (let i = 0; i < aiCount; i++) {
       const row = Math.floor(i / 2) + 1;
       const lane = (i % 2 === 0 ? 0.35 : -0.35);
-      const startT = (0.04 - row * 0.0035 + 1.0) % 1.0;
+      const startT = (0.04 - row * 0.007 + 1.0) % 1.0;
       const name = window.ATR.AMIGA_NAMES[i % window.ATR.AMIGA_NAMES.length];
       const color = window.ATR.AI_PALETTE[i % window.ATR.AI_PALETTE.length];
 
@@ -320,10 +333,10 @@ class Game {
       this.allCars.push(aiCar);
     }
 
-    // Immediately calculate initial world positions
+    // Compute initial car placement
     this.allCars.forEach(car => car.updatePhysics(0.001, this.track));
 
-    // Instantly snap cameras directly behind racers
+    // Align cameras
     this.snapCameraToCar(this.cameraP1, this.player1);
     if (this.player2) {
       this.snapCameraToCar(this.cameraP2, this.player2);
@@ -400,14 +413,6 @@ class Game {
     if (steerR) player.steer(1, delta);
     if (turbo) player.activateTurbo();
 
-    for (let obs of this.track.obstacles) {
-      const dist = player.mesh.position.distanceTo(obs.position);
-      if (dist < obs.radius) {
-        player.hitHazard(obs.type);
-        this.shakeIntensity = obs.type === 'OIL' ? 0.5 : 1.3;
-      }
-    }
-
     if (this.track.pitZone) {
       const pDist = player.mesh.position.distanceTo(this.track.pitZone.center);
       const isRefueling = (pDist < 14.0 && player.speed < 45.0);
@@ -423,6 +428,73 @@ class Game {
 
     const speedRatio = player.speed / player.maxSpeed;
     window.ATR.Audio.updateEngine(player.playerNum, speedRatio, accel);
+  }
+
+  handleCarCollisions(delta) {
+    const cars = this.allCars;
+    const count = cars.length;
+
+    for (let i = 0; i < count; i++) {
+      const a = cars[i];
+      for (let j = i + 1; j < count; j++) {
+        const b = cars[j];
+
+        const dist = a.mesh.position.distanceTo(b.mesh.position);
+        if (dist < 2.8) {
+          // Push cars apart sideways
+          const laneDiff = a.laneOffset - b.laneOffset;
+          const pushDir = Math.abs(laneDiff) > 0.04 ? Math.sign(laneDiff) : (Math.random() > 0.5 ? 1 : -1);
+          a.laneOffset = Math.max(-1.25, Math.min(1.25, a.laneOffset + pushDir * 0.16));
+          b.laneOffset = Math.max(-1.25, Math.min(1.25, b.laneOffset - pushDir * 0.16));
+
+          // Impact penalty: slow down cars
+          if (a.collisionCooldown <= 0 || b.collisionCooldown <= 0) {
+            const slowFactor = 0.82; // 18% speed loss per collision
+            a.speed = Math.max(0, a.speed * slowFactor);
+            b.speed = Math.max(0, b.speed * slowFactor);
+
+            a.collisionCooldown = 0.35;
+            b.collisionCooldown = 0.35;
+
+            // Audio & Camera Shake if player car involved
+            if (a.isPlayer || b.isPlayer) {
+              if (this.shakeIntensity < 0.85) this.shakeIntensity = 0.85;
+              if (window.ATR.Audio) window.ATR.Audio.playCrash();
+            }
+
+            // Impact sparks / smoke
+            if (window.ATR.smokeSystem) {
+              const mid = a.mesh.position.clone().add(b.mesh.position).multiplyScalar(0.5);
+              window.ATR.smokeSystem.emit({
+                position: mid,
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 2.5, 1.2, (Math.random() - 0.5) * 2.5),
+                startSize: 0.6,
+                endSize: 2.0,
+                startOpacity: 0.8,
+                maxLife: 0.45,
+                color: 0xffddaa
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  checkObstacleCollisions() {
+    if (!this.track || !this.track.obstacles) return;
+
+    for (let car of this.allCars) {
+      for (let obs of this.track.obstacles) {
+        const dist = car.mesh.position.distanceTo(obs.position);
+        if (dist < obs.radius) {
+          car.hitHazard(obs.type);
+          if (car.isPlayer) {
+            this.shakeIntensity = obs.type === 'OIL' ? 0.5 : 1.3;
+          }
+        }
+      }
+    }
   }
 
   updateCamera(camera, car, aspect, delta) {
@@ -468,7 +540,7 @@ class Game {
     });
     const rank = sorted.indexOf(player) + 1;
     const posEl = document.getElementById(`${hudPrefix}-pos`);
-    if (posEl) posEl.innerText = `${rank.toString().padStart(2, '0')}/${this.allCars.length}`;
+    if (posEl) posEl.innerText = `${rank.toString().padStart(2, '0')}/${this.allCars.length.toString().padStart(2, '0')}`;
 
     const lapEl = document.getElementById(`${hudPrefix}-lap`);
     if (lapEl) lapEl.innerText = `${Math.min(player.lap, this.totalLaps)}/${this.totalLaps}`;
@@ -519,7 +591,7 @@ class Game {
     const ctx = this.minimapCtx;
     const w = this.minimapCanvas.width;
     const h = this.minimapCanvas.height;
-    const pad = 12;
+    const pad = 20;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -543,29 +615,29 @@ class Game {
     ctx.closePath();
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(70, 160, 240, 0.75)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(70, 160, 240, 0.8)';
+    ctx.lineWidth = 4;
     ctx.stroke();
 
     // 2. Start/Finish Line Indicator
     const finishPos = toMap(this.track.spline.getPointAt(0.01).x, this.track.spline.getPointAt(0.01).z);
     ctx.fillStyle = '#ff0055';
     ctx.beginPath();
-    ctx.arc(finishPos.x, finishPos.y, 3, 0, Math.PI * 2);
+    ctx.arc(finishPos.x, finishPos.y, 5, 0, Math.PI * 2);
     ctx.fill();
 
     // 3. AI Racers
     for (let i = 0; i < this.aiCars.length; i++) {
       const car = this.aiCars[i].car;
       const pos = toMap(car.mesh.position.x, car.mesh.position.z);
-      ctx.fillStyle = 'rgba(210, 220, 230, 0.7)';
+      ctx.fillStyle = 'rgba(210, 220, 230, 0.75)';
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 2, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -574,10 +646,10 @@ class Game {
       const p2Pos = toMap(this.player2.mesh.position.x, this.player2.mesh.position.z);
       ctx.fillStyle = '#00c3ff';
       ctx.beginPath();
-      ctx.arc(p2Pos.x, p2Pos.y, 3.5, 0, Math.PI * 2);
+      ctx.arc(p2Pos.x, p2Pos.y, 6.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
 
@@ -586,10 +658,10 @@ class Game {
       const p1Pos = toMap(this.player1.mesh.position.x, this.player1.mesh.position.z);
       ctx.fillStyle = '#ff2244';
       ctx.beginPath();
-      ctx.arc(p1Pos.x, p1Pos.y, 4, 0, Math.PI * 2);
+      ctx.arc(p1Pos.x, p1Pos.y, 7.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
   }
@@ -659,7 +731,6 @@ class Game {
     this.handlePlayerInput(this.player1, delta);
     if (this.player2) this.handlePlayerInput(this.player2, delta);
 
-    // Update real-time lap timers while racing
     if (this.state === 'RACING') {
       if (this.player1 && !this.player1.finished) this.player1.currentLapTime += delta;
       if (this.player2 && !this.player2.finished) this.player2.currentLapTime += delta;
@@ -674,6 +745,10 @@ class Game {
 
     if (this.player1) this.player1.updatePhysics(delta, this.track);
     if (this.player2) this.player2.updatePhysics(delta, this.track);
+
+    // Collision detection
+    this.handleCarCollisions(delta);
+    this.checkObstacleCollisions();
 
     // Update smoke particles
     if (this.smokeSystem) {
@@ -702,7 +777,7 @@ class Game {
 
       this.renderer.setScissorTest(false);
     } else {
-      // Fullscreen Single Player matching full browser dimensions
+      // Fullscreen Single Player
       this.renderer.setViewport(0, 0, width, height);
       this.renderer.setScissorTest(false);
       this.updateCamera(this.cameraP1, this.player1, width / height, delta);
