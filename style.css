@@ -246,6 +246,29 @@ body.split-screen #hud-p2 {
   to   { transform: translate(-50%, -50%) scale(1.05); }
 }
 
+/* Minimap (Bottom-Left Corner) */
+#minimap-container {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  width: 160px;
+  height: 160px;
+  background: rgba(20, 25, 35, 0.45); /* Transparent grey to prevent blocking view */
+  border: 2px solid rgba(120, 160, 220, 0.35);
+  border-radius: 8px;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+#minimap-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* Countdown Overlay */
 #countdown-banner {
   position: absolute;

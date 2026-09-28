@@ -2,7 +2,8 @@
    AMIGA TURBO RACER - MAIN CONTROLLER & SPLIT ENGINE
    Handles Three.js rendering, horizontal split-screen
    scissor testing, fullscreen single-player, camera shake,
-   dynamic speed FOV, gamepad/keyboard inputs, and game states.
+   dynamic speed FOV, gamepad/keyboard inputs, minimap,
+   and game states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -51,6 +52,12 @@ class Game {
     this.allCars = [];
     this.shakeIntensity = 0;
     this.smokeSystem = null;
+
+    // Minimap references
+    this.minimapCanvas = document.getElementById('minimap-canvas');
+    this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
+    this.minimapBounds = null;
+    this.minimapTrackPoints = null;
 
     // Menu Showcase Car
     this.showcaseCar = window.ATR.CarModelFactory.createWedgeCar(0xff0044, true);
@@ -150,6 +157,7 @@ class Game {
     document.getElementById('hud-p2').classList.toggle('hidden', !isSplit);
     document.getElementById('hint-p2-card').classList.toggle('hidden', !isSplit);
     document.getElementById('controls-hint').classList.remove('hidden');
+    document.getElementById('minimap-container').classList.remove('hidden');
 
     if (this.track) {
       this.scene.remove(this.track.roadMesh);
@@ -173,6 +181,7 @@ class Game {
     const generator = new window.ATR.TrackGenerator();
     const trackData = generator.generate(this.seed, 'MEDIUM', this.envType, 50);
     this.track = new window.ATR.Track(this.scene, trackData);
+    this.initMinimapTrack();
 
     // Player 1 (Red Supercar) starts on Main Straight
     this.player1 = new window.ATR.Car(this.scene, {
@@ -349,6 +358,14 @@ class Game {
     camera.updateProjectionMatrix();
   }
 
+  formatTime(seconds) {
+    if (!seconds || seconds <= 0) return '00:00.00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 100);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  }
+
   updateHUD(player, hudPrefix) {
     if (!player) return;
 
@@ -366,6 +383,11 @@ class Game {
     const lapEl = document.getElementById(`${hudPrefix}-lap`);
     if (lapEl) lapEl.innerText = `${Math.min(player.lap, this.totalLaps)}/${this.totalLaps}`;
 
+    const timeEl = document.getElementById(`${hudPrefix}-time`);
+    if (timeEl) {
+      timeEl.innerText = this.formatTime(player.currentLapTime);
+    }
+
     const fuelBar = document.getElementById(`${hudPrefix}-fuel-bar`);
     if (fuelBar) {
       fuelBar.style.width = `${player.fuel}%`;
@@ -380,6 +402,105 @@ class Game {
       if (this.state === 'RACING') {
         this.finishRace();
       }
+    }
+  }
+
+  initMinimapTrack() {
+    if (!this.track || !this.track.spline) return;
+    const samples = 140;
+    const pts = [];
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+
+    for (let i = 0; i <= samples; i++) {
+      const p = this.track.spline.getPointAt(i / samples);
+      pts.push({ x: p.x, z: p.z });
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    }
+
+    this.minimapTrackPoints = pts;
+    this.minimapBounds = { minX, maxX, minZ, maxZ };
+  }
+
+  updateMinimap() {
+    if (!this.minimapCtx || !this.minimapBounds || !this.minimapTrackPoints) return;
+    const ctx = this.minimapCtx;
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
+    const pad = 14;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const { minX, maxX, minZ, maxZ } = this.minimapBounds;
+    const spanX = maxX - minX || 1;
+    const spanZ = maxZ - minZ || 1;
+
+    const toMap = (x, z) => ({
+      x: pad + ((x - minX) / spanX) * (w - pad * 2),
+      y: pad + ((z - minZ) / spanZ) * (h - pad * 2)
+    });
+
+    // 1. Draw Track Ribbon
+    ctx.beginPath();
+    const first = toMap(this.minimapTrackPoints[0].x, this.minimapTrackPoints[0].z);
+    ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < this.minimapTrackPoints.length; i++) {
+      const pt = toMap(this.minimapTrackPoints[i].x, this.minimapTrackPoints[i].z);
+      ctx.lineTo(pt.x, pt.y);
+    }
+    ctx.closePath();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(70, 160, 240, 0.75)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // 2. Start/Finish Line Indicator
+    const finishPos = toMap(this.track.spline.getPointAt(0.01).x, this.track.spline.getPointAt(0.01).z);
+    ctx.fillStyle = '#ff0055';
+    ctx.beginPath();
+    ctx.arc(finishPos.x, finishPos.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. AI Racers
+    for (let i = 0; i < this.aiCars.length; i++) {
+      const car = this.aiCars[i].car;
+      const pos = toMap(car.mesh.position.x, car.mesh.position.z);
+      ctx.fillStyle = 'rgba(210, 220, 230, 0.7)';
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 4. Player 2 (Cyan with white rim)
+    if (this.player2) {
+      const p2Pos = toMap(this.player2.mesh.position.x, this.player2.mesh.position.z);
+      ctx.fillStyle = '#00c3ff';
+      ctx.beginPath();
+      ctx.arc(p2Pos.x, p2Pos.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // 5. Player 1 (Red with white rim)
+    if (this.player1) {
+      const p1Pos = toMap(this.player1.mesh.position.x, this.player1.mesh.position.z);
+      ctx.fillStyle = '#ff2244';
+      ctx.beginPath();
+      ctx.arc(p1Pos.x, p1Pos.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
   }
 
@@ -401,10 +522,11 @@ class Game {
       const isP1 = (c === this.player1);
       const isP2 = (c === this.player2);
       const rowClass = isP1 ? 'p1-row' : (isP2 ? 'p2-row' : '');
+      const timeStr = c.bestLapTime ? `BEST: ${this.formatTime(c.bestLapTime)}` : (c.finished ? 'FINISHED' : 'LAP ' + Math.min(c.lap, this.totalLaps));
       html += `
         <div class="results-row ${rowClass}">
           <span>${idx + 1}. ${c.name}</span>
-          <span>${c.finished ? 'FINISHED' : 'LAP ' + Math.min(c.lap, this.totalLaps)}</span>
+          <span>${timeStr}</span>
         </div>
       `;
     });
@@ -417,6 +539,7 @@ class Game {
     document.getElementById('hud-p1').classList.add('hidden');
     document.getElementById('hud-p2').classList.add('hidden');
     document.getElementById('split-divider').classList.add('hidden');
+    document.getElementById('minimap-container').classList.add('hidden');
     document.getElementById('main-menu').classList.remove('hidden');
 
     window.ATR.Audio.stopEngines();
@@ -446,6 +569,15 @@ class Game {
     this.handlePlayerInput(this.player1, delta);
     if (this.player2) this.handlePlayerInput(this.player2, delta);
 
+    // Update real-time lap timers while racing
+    if (this.state === 'RACING') {
+      if (this.player1 && !this.player1.finished) this.player1.currentLapTime += delta;
+      if (this.player2 && !this.player2.finished) this.player2.currentLapTime += delta;
+      for (let ai of this.aiCars) {
+        if (!ai.car.finished) ai.car.currentLapTime += delta;
+      }
+    }
+
     for (let ai of this.aiCars) {
       ai.update(delta, this.allCars);
     }
@@ -460,6 +592,7 @@ class Game {
 
     this.updateHUD(this.player1, 'p1');
     if (this.player2) this.updateHUD(this.player2, 'p2');
+    this.updateMinimap();
 
     if (this.mode === 'TWO_PLAYER' && this.player2) {
       const halfH = Math.floor(height / 2);

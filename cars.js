@@ -230,6 +230,11 @@ class Car {
     this.finished = false;
     this.totalRaceDistance = 0;
 
+    // Lap timing properties
+    this.currentLapTime = 0;
+    this.lastLapTime = 0;
+    this.bestLapTime = null;
+
     this.fuel = 100.0;
     this.turbo = 100.0;
     this.isTurboActive = false;
@@ -461,6 +466,13 @@ class Car {
       this.checkpointIndex = nextCpIdx;
       if (this.checkpointIndex === 0) {
         this.lap++;
+        if (this.currentLapTime > 0) {
+          this.lastLapTime = this.currentLapTime;
+          if (!this.bestLapTime || this.currentLapTime < this.bestLapTime) {
+            this.bestLapTime = this.currentLapTime;
+          }
+          this.currentLapTime = 0;
+        }
       }
     }
   }
