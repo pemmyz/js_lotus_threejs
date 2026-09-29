@@ -286,9 +286,16 @@ class Car {
     this.speed *= Math.pow(this.drag, delta * 60);
     if (this.speed < 0) this.speed = 0;
 
+    // DEV: Keep turbo locked at max if Infinite Turbo is active for player
+    if (this.isPlayer && window.ATR?.devSettings?.infiniteTurbo) {
+      this.turbo = 100.0;
+    }
+
     // Turbo boost allows exceeding standard top speed
     if (this.isTurboActive && this.turbo > 0) {
-      this.turbo -= 24 * delta;
+      if (!this.isPlayer || !window.ATR?.devSettings?.infiniteTurbo) {
+        this.turbo -= 24 * delta;
+      }
       this.speed = Math.min(this.speed + this.accel * 1.6 * delta, this.maxSpeed * 1.22);
       if (this.turbo <= 0) this.isTurboActive = false;
     } else {
@@ -483,7 +490,8 @@ class Car {
   }
 
   activateTurbo() {
-    if (this.turbo > 20 && !this.isTurboActive) {
+    const hasTurbo = (this.isPlayer && window.ATR?.devSettings?.infiniteTurbo) || this.turbo > 20;
+    if (hasTurbo && !this.isTurboActive) {
       this.isTurboActive = true;
       if (window.ATR.Audio) window.ATR.Audio.playTurbo();
     }

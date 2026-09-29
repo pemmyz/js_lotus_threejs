@@ -61,6 +61,68 @@ body.mobile-mode {
   box-shadow: 0 0 18px #00ffff;
 }
 
+/* --- DEV DROPDOWN MENU (TOP-RIGHT CORNER) --- */
+#dev-menu-container {
+  position: fixed;
+  top: 8px;
+  right: 10px;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+#dev-menu-btn {
+  background: rgba(14, 20, 34, 0.9);
+  color: #ffe600;
+  border: 2px solid #ffe600;
+  border-radius: 4px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(8px, 1.8vmin, 10px);
+  padding: clamp(5px, 1.2vmin, 7px) clamp(8px, 1.8vmin, 12px);
+  cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 0 12px rgba(255, 230, 0, 0.4);
+  transition: all 0.15s ease;
+}
+
+#dev-menu-btn:hover {
+  background: #ffe600;
+  color: #000;
+  box-shadow: 0 0 18px #ffe600;
+}
+
+#dev-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: rgba(10, 14, 26, 0.96);
+  border: 2px solid #ffe600;
+  border-radius: 6px;
+  padding: 10px 14px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75), 0 0 14px rgba(255, 230, 0, 0.25);
+}
+
+.dev-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-family: 'Press Start 2P', monospace;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dev-menu-item input[type="checkbox"] {
+  accent-color: #ffe600;
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+}
+
 /* --- GAME CONTAINER & FULL VIEWPORT RESIZING (NO LETTERBOX) --- */
 #game-container {
   position: absolute;
@@ -185,12 +247,16 @@ body.split-screen #hud-p2 {
 /* Top-Right HUD (FUEL, TURBO, SPEED) */
 .hud-top-right {
   position: absolute;
-  top: 8px;
+  top: clamp(36px, 8.5vmin, 48px);
   right: clamp(10px, 2vmin, 18px);
   display: flex;
   align-items: center;
   gap: clamp(6px, 1.5vmin, 14px);
   z-index: 26;
+}
+
+#hud-p2 .hud-top-right {
+  top: 12px;
 }
 
 .hud-player-tag {
@@ -324,7 +390,6 @@ body.split-screen #hud-p2 {
   bottom: 20px;
   right: 20px;
   left: auto;
-  /* Doubled physical dimensions: 180px - 440px */
   width: clamp(180px, 48vmin, 440px);
   height: clamp(180px, 48vmin, 440px);
   background: rgba(18, 22, 34, 0.52);
@@ -343,7 +408,6 @@ body.split-screen #hud-p2 {
   display: block;
 }
 
-/* Stacked comfortably above the 2x larger action buttons in mobile mode */
 body.mobile-mode #minimap-container {
   bottom: calc(clamp(96px, 26vmin, 152px) + 24px);
   right: clamp(12px, 2.8vmin, 24px);
@@ -583,7 +647,6 @@ body.mobile-mode #mobile-controls {
   display: flex;
 }
 
-/* 2x Base Diameter: 96px to 152px */
 .mobile-control-btn {
   pointer-events: auto;
   width: clamp(96px, 26vmin, 152px);
@@ -614,7 +677,6 @@ body.mobile-mode #mobile-controls {
   color: #00ff66;
 }
 
-/* 2x Brake: 84px to 132px */
 .btn-brake {
   border-color: #ff3344;
   color: #ff3344;
@@ -623,7 +685,6 @@ body.mobile-mode #mobile-controls {
   font-size: clamp(32px, 9vmin, 52px);
 }
 
-/* 2x Turbo: 80px to 124px */
 .btn-turbo {
   border-color: #00ffff;
   color: #00ffff;

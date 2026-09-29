@@ -14,6 +14,25 @@
   <!-- Fullscreen / Mobile Mode Toggle Button (Top-Left, above all UI) -->
   <button id="mobile-btn">📱 FULLSCREEN / MOBILE</button>
 
+  <!-- DEV Menu Dropdown (Top-Right Corner) -->
+  <div id="dev-menu-container">
+    <button id="dev-menu-btn">DEV ▾</button>
+    <div id="dev-menu-dropdown" class="hidden">
+      <label class="dev-menu-item">
+        <input type="checkbox" id="dev-disable-ai-cars">
+        <span>Disable AI vs Cars</span>
+      </label>
+      <label class="dev-menu-item">
+        <input type="checkbox" id="dev-disable-ai-env">
+        <span>Disable AI vs Env</span>
+      </label>
+      <label class="dev-menu-item">
+        <input type="checkbox" id="dev-infinite-turbo">
+        <span>Infinite Turbo</span>
+      </label>
+    </div>
+  </div>
+
   <!-- Scaled Game Container Wrapper -->
   <div id="game-container">
     <!-- Screen Viewport Wrapper -->

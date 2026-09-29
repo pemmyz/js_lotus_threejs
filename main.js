@@ -204,6 +204,42 @@ class Game {
       };
     }
 
+    // --- DEV MENU CONTROLS ---
+    window.ATR.devSettings = {
+      disableAiCarCollisions: false,
+      disableAiEnvCollisions: false,
+      infiniteTurbo: false
+    };
+
+    const devBtn = document.getElementById('dev-menu-btn');
+    const devDropdown = document.getElementById('dev-menu-dropdown');
+    const devContainer = document.getElementById('dev-menu-container');
+
+    if (devBtn && devDropdown) {
+      devBtn.onclick = (e) => {
+        e.stopPropagation();
+        devDropdown.classList.toggle('hidden');
+      };
+
+      document.addEventListener('click', (e) => {
+        if (devContainer && !devContainer.contains(e.target)) {
+          devDropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    document.getElementById('dev-disable-ai-cars')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.disableAiCarCollisions = e.target.checked;
+    });
+
+    document.getElementById('dev-disable-ai-env')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.disableAiEnvCollisions = e.target.checked;
+    });
+
+    document.getElementById('dev-infinite-turbo')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.infiniteTurbo = e.target.checked;
+    });
+
     const aiSelect = document.getElementById('menu-ai-count');
     if (aiSelect) {
       this.aiCount = parseInt(aiSelect.value, 10);
@@ -443,6 +479,11 @@ class Game {
       for (let j = i + 1; j < count; j++) {
         const b = cars[j];
 
+        // DEV: Skip collision if either car is AI and AI car collisions are disabled
+        if (window.ATR?.devSettings?.disableAiCarCollisions && (!a.isPlayer || !b.isPlayer)) {
+          continue;
+        }
+
         const dist = a.mesh.position.distanceTo(b.mesh.position);
         if (dist < 2.8) {
           // Push cars apart sideways
@@ -489,6 +530,11 @@ class Game {
     if (!this.track || !this.track.obstacles) return;
 
     for (let car of this.allCars) {
+      // DEV: Skip hazard checks for AI if AI env collisions are disabled
+      if (window.ATR?.devSettings?.disableAiEnvCollisions && !car.isPlayer) {
+        continue;
+      }
+
       for (let obs of this.track.obstacles) {
         const dist = car.mesh.position.distanceTo(obs.position);
         if (dist < obs.radius) {
