@@ -196,14 +196,50 @@ class Game {
   }
 
   setupUI() {
-    const mobileBtn = document.getElementById('mobile-btn');
-    if (mobileBtn) {
-      mobileBtn.onclick = () => {
+    // Utility to bind tap events across Desktop and Mobile Android Chrome reliably
+    const bindTap = (element, callback) => {
+      if (!element) return;
+      let lastTrigger = 0;
+
+      const onTrigger = (e) => {
+        const now = Date.now();
+        if (now - lastTrigger < 300) return; // Prevent double-fire from touchend + click
+        lastTrigger = now;
+
+        if (e.cancelable && e.type !== 'click') {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+
         if (window.ATR.Audio && !window.ATR.Audio.isStarted) {
           window.ATR.Audio.init();
         }
-        this.toggleFullscreen();
+
+        callback(e);
       };
+
+      element.addEventListener('touchend', onTrigger, { passive: false });
+      element.addEventListener('pointerup', onTrigger);
+      element.addEventListener('click', onTrigger);
+    };
+
+    const flashButtonFeedback = (btn, flashText) => {
+      if (!btn) return;
+      const origText = btn.dataset.origText || btn.innerText;
+      btn.dataset.origText = origText;
+      btn.classList.add('btn-tapped');
+      btn.innerText = flashText;
+      setTimeout(() => {
+        btn.classList.remove('btn-tapped');
+        btn.innerText = origText;
+      }, 900);
+    };
+
+    const mobileBtn = document.getElementById('mobile-btn');
+    if (mobileBtn) {
+      bindTap(mobileBtn, () => {
+        this.toggleFullscreen();
+      });
     }
 
     // --- DEV MENU CONTROLS ---
@@ -218,16 +254,17 @@ class Game {
     const devContainer = document.getElementById('dev-menu-container');
 
     if (devBtn && devDropdown) {
-      devBtn.onclick = (e) => {
-        e.stopPropagation();
+      bindTap(devBtn, () => {
         devDropdown.classList.toggle('hidden');
-      };
+      });
 
-      document.addEventListener('click', (e) => {
+      const onDocTouch = (e) => {
         if (devContainer && !devContainer.contains(e.target)) {
           devDropdown.classList.add('hidden');
         }
-      });
+      };
+      document.addEventListener('click', onDocTouch);
+      document.addEventListener('touchend', onDocTouch);
     }
 
     document.getElementById('dev-disable-ai-cars')?.addEventListener('change', (e) => {
@@ -250,11 +287,10 @@ class Game {
       });
     }
 
-    // --- 50 CARS & ADD +5 CARS HANDLERS ---
+    // --- 50 CARS & ADD +5 CARS HANDLERS (Android Chrome Optimized) ---
     const set50Btn = document.getElementById('dev-set-50-cars');
     if (set50Btn) {
-      set50Btn.onclick = (e) => {
-        e.stopPropagation();
+      bindTap(set50Btn, () => {
         this.aiCount = 50;
 
         if (aiSelect) {
@@ -275,14 +311,15 @@ class Game {
             this.spawnAICars(needed);
           }
         }
-      };
+
+        flashButtonFeedback(set50Btn, '✔ 50 CARS SET!');
+        if (window.ATR.Audio) window.ATR.Audio.playBeep(true);
+      });
     }
 
     const add5Btn = document.getElementById('dev-add-5-cars');
     if (add5Btn) {
-      add5Btn.onclick = (e) => {
-        e.stopPropagation();
-
+      bindTap(add5Btn, () => {
         // If currently in a race, dynamically spawn 5 cars live on track
         if (this.track && (this.state === 'RACING' || this.state === 'COUNTDOWN')) {
           this.spawnAICars(5);
@@ -302,7 +339,11 @@ class Game {
           }
           aiSelect.value = valStr;
         }
-      };
+
+        const totalActive = this.allCars.length > 0 ? this.allCars.length : (this.aiCount + 1);
+        flashButtonFeedback(add5Btn, `✔ +5 ADDED (${totalActive})`);
+        if (window.ATR.Audio) window.ATR.Audio.playBeep(true);
+      });
     }
 
     // Circuit Map, Dynamic Environment, and Counter-Clockwise Selectors
@@ -337,21 +378,21 @@ class Game {
     }
     updateMapSelection();
 
-    document.getElementById('btn-single-player').onclick = () => this.startRace('SINGLE');
-    document.getElementById('btn-two-player').onclick = () => this.startRace('TWO_PLAYER');
-    document.getElementById('btn-practice').onclick = () => this.startRace('PRACTICE');
-    document.getElementById('btn-random-track').onclick = () => {
+    bindTap(document.getElementById('btn-single-player'), () => this.startRace('SINGLE'));
+    bindTap(document.getElementById('btn-two-player'), () => this.startRace('TWO_PLAYER'));
+    bindTap(document.getElementById('btn-practice'), () => this.startRace('PRACTICE'));
+    bindTap(document.getElementById('btn-random-track'), () => {
       this.seed = Math.floor(100000 + Math.random() * 900000);
       const seedEl = document.getElementById('menu-seed-display');
       if (seedEl) seedEl.innerText = this.seed;
-    };
+    });
 
-    document.getElementById('btn-options').onclick = () => {
+    bindTap(document.getElementById('btn-options'), () => {
       document.getElementById('main-menu').classList.add('hidden');
       document.getElementById('options-menu').classList.remove('hidden');
-    };
+    });
 
-    document.getElementById('btn-options-back').onclick = () => {
+    bindTap(document.getElementById('btn-options-back'), () => {
       if (this.mapLayout === 'ORIGINAL') {
         this.envType = document.getElementById('opt-env').value;
         if (envSelect) envSelect.value = this.envType;
@@ -362,14 +403,14 @@ class Game {
 
       document.getElementById('options-menu').classList.add('hidden');
       document.getElementById('main-menu').classList.remove('hidden');
-    };
+    });
 
-    document.getElementById('btn-results-retry').onclick = () => this.startRace(this.mode);
-    document.getElementById('btn-results-new').onclick = () => {
+    bindTap(document.getElementById('btn-results-retry'), () => this.startRace(this.mode));
+    bindTap(document.getElementById('btn-results-new'), () => {
       this.seed = Math.floor(100000 + Math.random() * 900000);
       this.startRace(this.mode);
-    };
-    document.getElementById('btn-results-menu').onclick = () => this.returnToMenu();
+    });
+    bindTap(document.getElementById('btn-results-menu'), () => this.returnToMenu());
   }
 
   spawnAICars(count) {
@@ -379,9 +420,12 @@ class Game {
 
     for (let i = 0; i < count; i++) {
       const idx = currentAiCount + i;
-      const row = Math.floor(idx / 2) + 1;
       const lane = (idx % 2 === 0 ? 0.35 : -0.35) + (Math.random() - 0.5) * 0.25;
-      const startT = ((refT - (i + 1) * 0.007) % 1.0 + 1.0) % 1.0;
+      
+      // Distribute cars both ahead and behind the reference point so they are visible
+      const offset = (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * 0.012;
+      const startT = ((refT + offset) % 1.0 + 1.0) % 1.0;
+
       const name = window.ATR.AMIGA_NAMES[idx % window.ATR.AMIGA_NAMES.length] +
                    (idx >= window.ATR.AMIGA_NAMES.length ? ` #${Math.floor(idx / window.ATR.AMIGA_NAMES.length) + 1}` : '');
       const color = window.ATR.AI_PALETTE[idx % window.ATR.AI_PALETTE.length];
@@ -394,9 +438,8 @@ class Game {
         laneOffset: Math.max(-1.15, Math.min(1.15, lane))
       });
 
-      // If game is in progress, match current race speed and lap so cars blend in smoothly
       if (this.state === 'RACING' && this.player1) {
-        aiCar.speed = Math.max(60, this.player1.speed * (0.75 + Math.random() * 0.25));
+        aiCar.speed = Math.max(60, this.player1.speed * (0.8 + Math.random() * 0.2));
         aiCar.lap = this.player1.lap;
       }
 
@@ -406,6 +449,10 @@ class Game {
       this.aiCars.push(controller);
       this.allCars.push(aiCar);
     }
+
+    if (this.player1) this.updateHUD(this.player1, 'p1');
+    if (this.player2) this.updateHUD(this.player2, 'p2');
+    this.updateMinimap();
   }
 
   startRace(mode = 'SINGLE') {

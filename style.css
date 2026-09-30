@@ -53,6 +53,7 @@ body.mobile-mode {
   box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
   transition: all 0.15s ease;
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
 #mobile-btn:hover {
@@ -66,8 +67,9 @@ body.mobile-mode {
   position: fixed;
   top: 8px;
   right: 10px;
-  z-index: 9999;
+  z-index: 10000;
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
 #dev-menu-btn {
@@ -77,14 +79,16 @@ body.mobile-mode {
   border-radius: 4px;
   font-family: 'Press Start 2P', monospace;
   font-size: clamp(8px, 1.8vmin, 10px);
-  padding: clamp(5px, 1.2vmin, 7px) clamp(8px, 1.8vmin, 12px);
+  padding: clamp(6px, 1.8vmin, 10px) clamp(10px, 2vmin, 14px);
   cursor: pointer;
   letter-spacing: 1px;
   box-shadow: 0 0 12px rgba(255, 230, 0, 0.4);
   transition: all 0.15s ease;
+  touch-action: manipulation;
+  pointer-events: auto;
 }
 
-#dev-menu-btn:hover {
+#dev-menu-btn:hover, #dev-menu-btn:active {
   background: #ffe600;
   color: #000;
   box-shadow: 0 0 18px #ffe600;
@@ -94,15 +98,18 @@ body.mobile-mode {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  background: rgba(10, 14, 26, 0.96);
+  background: rgba(10, 14, 26, 0.98);
   border: 2px solid #ffe600;
   border-radius: 6px;
-  padding: 10px 14px;
-  min-width: 220px;
+  padding: 12px 14px;
+  min-width: 230px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75), 0 0 14px rgba(255, 230, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 16px rgba(255, 230, 0, 0.35);
+  pointer-events: auto;
+  touch-action: manipulation;
+  z-index: 10001;
 }
 
 .dev-menu-item {
@@ -114,44 +121,60 @@ body.mobile-mode {
   color: #fff;
   cursor: pointer;
   white-space: nowrap;
+  touch-action: manipulation;
+  padding: 4px 0;
 }
 
 .dev-menu-item input[type="checkbox"] {
   accent-color: #ffe600;
   cursor: pointer;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+  touch-action: manipulation;
 }
 
 .dev-menu-separator {
   height: 1px;
-  background: rgba(255, 230, 0, 0.3);
-  margin: 2px 0;
+  background: rgba(255, 230, 0, 0.35);
+  margin: 4px 0;
 }
 
+/* Touch-optimized Dev Action Buttons */
 .dev-menu-btn-action {
   background: #1a233a;
-  border: 1px solid #ffe600;
+  border: 2px solid #ffe600;
   color: #ffe600;
   font-family: 'Press Start 2P', monospace;
-  font-size: 8px;
-  padding: 7px 10px;
-  border-radius: 4px;
+  font-size: clamp(8px, 1.9vmin, 10px);
+  padding: 10px 12px;
+  min-height: 40px;
+  border-radius: 5px;
   cursor: pointer;
   text-align: center;
   letter-spacing: 0.5px;
-  transition: all 0.15s ease;
+  transition: all 0.1s ease;
+  touch-action: manipulation;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: rgba(255, 230, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dev-menu-btn-action:hover {
   background: #ffe600;
   color: #000;
   box-shadow: 0 0 10px #ffe600;
-  transform: translateY(-1px);
 }
 
-.dev-menu-btn-action:active {
-  transform: translateY(1px);
+.dev-menu-btn-action:active,
+.dev-menu-btn-action.btn-tapped {
+  background: #ffe600 !important;
+  color: #000000 !important;
+  transform: scale(0.96);
+  box-shadow: 0 0 16px #ffe600;
 }
 
 /* --- GAME CONTAINER & FULL VIEWPORT RESIZING (NO LETTERBOX) --- */
@@ -696,6 +719,7 @@ body.mobile-mode #mobile-controls {
   transition: transform 0.08s, background 0.08s;
   -webkit-tap-highlight-color: transparent;
   outline: none;
+  touch-action: manipulation;
 }
 
 .mobile-control-btn:active {
