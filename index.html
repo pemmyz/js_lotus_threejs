@@ -156,8 +156,35 @@
               <p class="retro-subtitle">ARCADE &bull; LOW-POLY &bull; SPLIT-SCREEN</p>
             </div>
 
-            <div class="seed-badge">
-              TRACK SEED: <span id="menu-seed-display">849271</span>
+            <!-- Map / Circuit Selector -->
+            <div class="menu-config-row">
+              <label for="menu-map-select">CIRCUIT / MAP:</label>
+              <select id="menu-map-select" class="retro-select">
+                <option value="ORIGINAL" selected>ORIGINAL GRAND PRIX</option>
+                <option value="SERPENTINE">SERPENTINE TWISTS (FOREST)</option>
+                <option value="DUNES">CANYON DUNES (DESERT)</option>
+                <option value="ALPINE">DEVIL'S PEAK (MOUNTAIN)</option>
+                <option value="FJORD">FROZEN FJORD (SNOW)</option>
+                <option value="MIDNIGHT">CYBER VALE (NIGHT)</option>
+              </select>
+            </div>
+
+            <!-- Dynamic Environment Selector (Visible for ORIGINAL map) -->
+            <div class="menu-config-row" id="menu-env-row">
+              <label for="menu-env-select">ENVIRONMENT:</label>
+              <select id="menu-env-select" class="retro-select">
+                <option value="FOREST" selected>Forest Green</option>
+                <option value="DESERT">Desert Sun (Cacti)</option>
+                <option value="MOUNTAIN">Alpine Peak</option>
+                <option value="SNOW">Snow Ridge (Snow Pines)</option>
+                <option value="NIGHT">Midnight Run</option>
+              </select>
+            </div>
+
+            <!-- Counter-Clockwise Checkbox Toggle -->
+            <div class="menu-config-row">
+              <label for="menu-counter-clockwise">COUNTER-CLOCKWISE:</label>
+              <input type="checkbox" id="menu-counter-clockwise" style="accent-color: #00ffff; width: 18px; height: 18px; cursor: pointer;">
             </div>
 
             <!-- AI Opponents Configuration Dropdown (Default 3) -->
@@ -171,6 +198,10 @@
                 <option value="9">9 AI</option>
                 <option value="19">19 AI (Full Grid)</option>
               </select>
+            </div>
+
+            <div class="seed-badge">
+              TRACK SEED: <span id="menu-seed-display">849271</span>
             </div>
 
             <div class="menu-buttons">

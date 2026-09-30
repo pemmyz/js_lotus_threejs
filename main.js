@@ -38,9 +38,11 @@ class Game {
     this.mode = 'SINGLE';
     this.state = 'MENU';
     this.seed = 849271;
+    this.mapLayout = 'ORIGINAL';
     this.envType = 'FOREST';
     this.totalLaps = 3;
     this.aiCount = 3; // Default 3 AI cars (4 total racers)
+    this.counterClockwise = false;
     this.clock = new THREE.Clock();
 
     this.keys = {};
@@ -248,12 +250,45 @@ class Game {
       });
     }
 
+    // Circuit Map, Dynamic Environment, and Counter-Clockwise Selectors
+    const mapSelect = document.getElementById('menu-map-select');
+    const envRow = document.getElementById('menu-env-row');
+    const envSelect = document.getElementById('menu-env-select');
+    const ccwCheckbox = document.getElementById('menu-counter-clockwise');
+
+    const updateMapSelection = () => {
+      this.mapLayout = mapSelect ? mapSelect.value : 'ORIGINAL';
+
+      if (this.mapLayout === 'ORIGINAL') {
+        if (envRow) envRow.classList.remove('hidden');
+        this.envType = envSelect ? envSelect.value : 'FOREST';
+      } else {
+        if (envRow) envRow.classList.add('hidden');
+        if (this.mapLayout === 'SERPENTINE') this.envType = 'FOREST';
+        else if (this.mapLayout === 'DUNES') this.envType = 'DESERT';
+        else if (this.mapLayout === 'ALPINE') this.envType = 'MOUNTAIN';
+        else if (this.mapLayout === 'FJORD') this.envType = 'SNOW';
+        else if (this.mapLayout === 'MIDNIGHT') this.envType = 'NIGHT';
+      }
+    };
+
+    if (mapSelect) mapSelect.addEventListener('change', updateMapSelection);
+    if (envSelect) envSelect.addEventListener('change', updateMapSelection);
+    if (ccwCheckbox) {
+      this.counterClockwise = ccwCheckbox.checked;
+      ccwCheckbox.addEventListener('change', (e) => {
+        this.counterClockwise = e.target.checked;
+      });
+    }
+    updateMapSelection();
+
     document.getElementById('btn-single-player').onclick = () => this.startRace('SINGLE');
     document.getElementById('btn-two-player').onclick = () => this.startRace('TWO_PLAYER');
     document.getElementById('btn-practice').onclick = () => this.startRace('PRACTICE');
     document.getElementById('btn-random-track').onclick = () => {
       this.seed = Math.floor(100000 + Math.random() * 900000);
-      document.getElementById('menu-seed-display').innerText = this.seed;
+      const seedEl = document.getElementById('menu-seed-display');
+      if (seedEl) seedEl.innerText = this.seed;
     };
 
     document.getElementById('btn-options').onclick = () => {
@@ -262,7 +297,10 @@ class Game {
     };
 
     document.getElementById('btn-options-back').onclick = () => {
-      this.envType = document.getElementById('opt-env').value;
+      if (this.mapLayout === 'ORIGINAL') {
+        this.envType = document.getElementById('opt-env').value;
+        if (envSelect) envSelect.value = this.envType;
+      }
       this.totalLaps = parseInt(document.getElementById('opt-laps').value, 10);
       const vol = parseInt(document.getElementById('opt-volume').value, 10) / 100;
       window.ATR.Audio.setVolume(vol);
@@ -315,9 +353,9 @@ class Game {
       window.ATR.smokeSystem = this.smokeSystem;
     }
 
-    // Generate circuit
+    // Generate circuit based on layout, environment, and counter-clockwise direction
     const generator = new window.ATR.TrackGenerator();
-    const trackData = generator.generate(this.seed, 'MEDIUM', this.envType, 50);
+    const trackData = generator.generate(this.seed, 'MEDIUM', this.envType, 72, this.mapLayout, this.counterClockwise);
     this.track = new window.ATR.Track(this.scene, trackData);
     this.initMinimapTrack();
 
