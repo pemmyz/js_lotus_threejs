@@ -123,6 +123,37 @@ body.mobile-mode {
   height: 14px;
 }
 
+.dev-menu-separator {
+  height: 1px;
+  background: rgba(255, 230, 0, 0.3);
+  margin: 2px 0;
+}
+
+.dev-menu-btn-action {
+  background: #1a233a;
+  border: 1px solid #ffe600;
+  color: #ffe600;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  padding: 7px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.5px;
+  transition: all 0.15s ease;
+}
+
+.dev-menu-btn-action:hover {
+  background: #ffe600;
+  color: #000;
+  box-shadow: 0 0 10px #ffe600;
+  transform: translateY(-1px);
+}
+
+.dev-menu-btn-action:active {
+  transform: translateY(1px);
+}
+
 /* --- GAME CONTAINER & FULL VIEWPORT RESIZING (NO LETTERBOX) --- */
 #game-container {
   position: absolute;

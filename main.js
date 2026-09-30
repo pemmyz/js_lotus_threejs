@@ -250,6 +250,61 @@ class Game {
       });
     }
 
+    // --- 50 CARS & ADD +5 CARS HANDLERS ---
+    const set50Btn = document.getElementById('dev-set-50-cars');
+    if (set50Btn) {
+      set50Btn.onclick = (e) => {
+        e.stopPropagation();
+        this.aiCount = 50;
+
+        if (aiSelect) {
+          let opt50 = Array.from(aiSelect.options).find(o => o.value === '50');
+          if (!opt50) {
+            opt50 = document.createElement('option');
+            opt50.value = '50';
+            opt50.innerText = '50 AI (Dev Chaos)';
+            aiSelect.appendChild(opt50);
+          }
+          aiSelect.value = '50';
+        }
+
+        // If currently in a race, instantly spawn up to 50 AI cars on the track
+        if (this.track && (this.state === 'RACING' || this.state === 'COUNTDOWN')) {
+          const needed = 50 - this.aiCars.length;
+          if (needed > 0) {
+            this.spawnAICars(needed);
+          }
+        }
+      };
+    }
+
+    const add5Btn = document.getElementById('dev-add-5-cars');
+    if (add5Btn) {
+      add5Btn.onclick = (e) => {
+        e.stopPropagation();
+
+        // If currently in a race, dynamically spawn 5 cars live on track
+        if (this.track && (this.state === 'RACING' || this.state === 'COUNTDOWN')) {
+          this.spawnAICars(5);
+          this.aiCount = this.aiCars.length;
+        } else {
+          this.aiCount = (this.aiCount || 3) + 5;
+        }
+
+        if (aiSelect) {
+          const valStr = this.aiCount.toString();
+          let opt = Array.from(aiSelect.options).find(o => o.value === valStr);
+          if (!opt) {
+            opt = document.createElement('option');
+            opt.value = valStr;
+            opt.innerText = `${valStr} AI`;
+            aiSelect.appendChild(opt);
+          }
+          aiSelect.value = valStr;
+        }
+      };
+    }
+
     // Circuit Map, Dynamic Environment, and Counter-Clockwise Selectors
     const mapSelect = document.getElementById('menu-map-select');
     const envRow = document.getElementById('menu-env-row');
@@ -315,6 +370,42 @@ class Game {
       this.startRace(this.mode);
     };
     document.getElementById('btn-results-menu').onclick = () => this.returnToMenu();
+  }
+
+  spawnAICars(count) {
+    if (!this.track) return;
+    const currentAiCount = this.aiCars.length;
+    const refT = this.player1 ? this.player1.trackT : 0.04;
+
+    for (let i = 0; i < count; i++) {
+      const idx = currentAiCount + i;
+      const row = Math.floor(idx / 2) + 1;
+      const lane = (idx % 2 === 0 ? 0.35 : -0.35) + (Math.random() - 0.5) * 0.25;
+      const startT = ((refT - (i + 1) * 0.007) % 1.0 + 1.0) % 1.0;
+      const name = window.ATR.AMIGA_NAMES[idx % window.ATR.AMIGA_NAMES.length] +
+                   (idx >= window.ATR.AMIGA_NAMES.length ? ` #${Math.floor(idx / window.ATR.AMIGA_NAMES.length) + 1}` : '');
+      const color = window.ATR.AI_PALETTE[idx % window.ATR.AI_PALETTE.length];
+
+      const aiCar = new window.ATR.Car(this.scene, {
+        name,
+        isPlayer: false,
+        color,
+        startT,
+        laneOffset: Math.max(-1.15, Math.min(1.15, lane))
+      });
+
+      // If game is in progress, match current race speed and lap so cars blend in smoothly
+      if (this.state === 'RACING' && this.player1) {
+        aiCar.speed = Math.max(60, this.player1.speed * (0.75 + Math.random() * 0.25));
+        aiCar.lap = this.player1.lap;
+      }
+
+      aiCar.updatePhysics(0.001, this.track);
+
+      const controller = new window.ATR.AIController(aiCar, this.track, 0.9 + Math.random() * 0.2);
+      this.aiCars.push(controller);
+      this.allCars.push(aiCar);
+    }
   }
 
   startRace(mode = 'SINGLE') {
@@ -385,17 +476,18 @@ class Game {
       this.player2 = null;
     }
 
-    // Configurable AI Competitors (Default 3)
+    // Configurable AI Competitors
     const aiSelectEl = document.getElementById('menu-ai-count');
     const selectedAi = aiSelectEl ? parseInt(aiSelectEl.value, 10) : this.aiCount;
-    const maxAi = isSplit ? Math.min(selectedAi, 18) : selectedAi;
+    const maxAi = isSplit ? Math.min(selectedAi, 50) : selectedAi;
     const aiCount = mode === 'PRACTICE' ? 0 : maxAi;
 
     for (let i = 0; i < aiCount; i++) {
       const row = Math.floor(i / 2) + 1;
       const lane = (i % 2 === 0 ? 0.35 : -0.35);
       const startT = (0.04 - row * 0.007 + 1.0) % 1.0;
-      const name = window.ATR.AMIGA_NAMES[i % window.ATR.AMIGA_NAMES.length];
+      const name = window.ATR.AMIGA_NAMES[i % window.ATR.AMIGA_NAMES.length] +
+                   (i >= window.ATR.AMIGA_NAMES.length ? ` #${Math.floor(i / window.ATR.AMIGA_NAMES.length) + 1}` : '');
       const color = window.ATR.AI_PALETTE[i % window.ATR.AI_PALETTE.length];
 
       const aiCar = new window.ATR.Car(this.scene, {
@@ -805,6 +897,12 @@ class Game {
     if (this.smokeSystem) {
       this.smokeSystem.clear();
     }
+
+    // Clean up race cars from the scene
+    this.allCars.forEach(c => this.scene.remove(c.mesh));
+    this.allCars = [];
+    this.aiCars = [];
+
     this.showcaseCar.visible = true;
   }
 
