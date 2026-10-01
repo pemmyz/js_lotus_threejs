@@ -2,7 +2,7 @@
    AMIGA TURBO RACER - MAIN CONTROLLER & SPLIT ENGINE
    Handles Three.js rendering, horizontal split-screen,
    responsive scaling, mobile controls, FPS counter,
-   pitstop service mechanics, damage, and HUD states.
+   pitstop service (fuel, damage, tires), and HUD states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -249,6 +249,9 @@ class Game {
     // --- DEV MENU CONTROLS ---
     window.ATR.devSettings = {
       obstacleDamage: true,
+      infiniteArmor: false,
+      infiniteTires: false,
+      infiniteFuel: false,
       disableAiCarCollisions: false,
       disableAiEnvCollisions: false,
       infiniteTurbo: false
@@ -283,16 +286,41 @@ class Game {
     if (devDamageCheck) devDamageCheck.addEventListener('change', onDamageChange);
     if (optDamageCheck) optDamageCheck.addEventListener('change', onDamageChange);
 
+    // Dev Infinite Armor (God Mode), Tires, Fuel, Turbo
+    document.getElementById('dev-infinite-armor')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.infiniteArmor = e.target.checked;
+      if (e.target.checked) {
+        if (this.player1) this.player1.health = 100.0;
+        if (this.player2) this.player2.health = 100.0;
+      }
+    });
+
+    document.getElementById('dev-infinite-tires')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.infiniteTires = e.target.checked;
+      if (e.target.checked) {
+        if (this.player1) this.player1.tires = 100.0;
+        if (this.player2) this.player2.tires = 100.0;
+      }
+    });
+
+    document.getElementById('dev-infinite-fuel')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.infiniteFuel = e.target.checked;
+      if (e.target.checked) {
+        if (this.player1) this.player1.fuel = 100.0;
+        if (this.player2) this.player2.fuel = 100.0;
+      }
+    });
+
+    document.getElementById('dev-infinite-turbo')?.addEventListener('change', (e) => {
+      window.ATR.devSettings.infiniteTurbo = e.target.checked;
+    });
+
     document.getElementById('dev-disable-ai-cars')?.addEventListener('change', (e) => {
       window.ATR.devSettings.disableAiCarCollisions = e.target.checked;
     });
 
     document.getElementById('dev-disable-ai-env')?.addEventListener('change', (e) => {
       window.ATR.devSettings.disableAiEnvCollisions = e.target.checked;
-    });
-
-    document.getElementById('dev-infinite-turbo')?.addEventListener('change', (e) => {
-      window.ATR.devSettings.infiniteTurbo = e.target.checked;
     });
 
     // Lap Selector Synchronization (Main Menu & Options)
@@ -660,7 +688,7 @@ class Game {
     if (steerR) player.steer(1, delta);
     if (turbo) player.activateTurbo();
 
-    // Pitstop trigger & roadside service handling
+    // Pitstop trigger: change tires, refuel, and repair armor
     if (this.track.pitZone) {
       const pDist = player.mesh.position.distanceTo(this.track.pitZone.center);
       const inPitArea = pDist < 16.0;
@@ -676,12 +704,14 @@ class Game {
           } else {
             const needsFuel = player.fuel < 100;
             const needsArmor = player.health < 100;
+            const needsTires = player.tires < 100;
 
-            if (needsFuel || needsArmor) {
+            if (needsFuel || needsArmor || needsTires) {
               pitTag.className = 'hud-center-msg pit-servicing';
-              pitTag.innerText = 'PIT SERVICING...';
+              pitTag.innerText = 'PIT SERVICING (TIRES & FUEL)...';
               player.fuel = Math.min(100, player.fuel + 45 * delta);
               player.health = Math.min(100, player.health + 40 * delta);
+              player.tires = Math.min(100, player.tires + 50 * delta);
               if (window.ATR.Audio) window.ATR.Audio.playRepair();
             } else {
               pitTag.className = 'hud-center-msg pit-complete';
@@ -837,12 +867,21 @@ class Game {
       healthBar.classList.toggle('low-health', player.health < 25);
     }
 
+    // Tires HUD Bar
+    const tireBar = document.getElementById(`${hudPrefix}-tire-bar`);
+    if (tireBar) {
+      tireBar.style.width = `${Math.max(0, player.tires)}%`;
+      tireBar.classList.toggle('low-tires', player.tires < 25);
+    }
+
+    // Fuel HUD Bar
     const fuelBar = document.getElementById(`${hudPrefix}-fuel-bar`);
     if (fuelBar) {
       fuelBar.style.width = `${player.fuel}%`;
       fuelBar.classList.toggle('low-fuel', player.fuel < 22);
     }
 
+    // Turbo HUD Bar
     const turboBar = document.getElementById(`${hudPrefix}-turbo-bar`);
     if (turboBar) turboBar.style.width = `${player.turbo}%`;
 

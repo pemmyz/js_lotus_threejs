@@ -26,16 +26,28 @@
         <span>Obstacle Damage</span>
       </label>
       <label class="dev-menu-item">
+        <input type="checkbox" id="dev-infinite-armor">
+        <span>Infinite Armor (God Mode)</span>
+      </label>
+      <label class="dev-menu-item">
+        <input type="checkbox" id="dev-infinite-tires">
+        <span>Infinite Tires</span>
+      </label>
+      <label class="dev-menu-item">
+        <input type="checkbox" id="dev-infinite-fuel">
+        <span>Infinite Fuel</span>
+      </label>
+      <label class="dev-menu-item">
+        <input type="checkbox" id="dev-infinite-turbo">
+        <span>Infinite Turbo</span>
+      </label>
+      <label class="dev-menu-item">
         <input type="checkbox" id="dev-disable-ai-cars">
         <span>Disable AI vs Cars</span>
       </label>
       <label class="dev-menu-item">
         <input type="checkbox" id="dev-disable-ai-env">
         <span>Disable AI vs Env</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-infinite-turbo">
-        <span>Infinite Turbo</span>
       </label>
 
       <div class="dev-menu-separator"></div>
@@ -84,6 +96,12 @@
               </div>
             </div>
             <div class="hud-bar-group">
+              <span class="hud-label">TIRES</span>
+              <div class="hud-bar-frame">
+                <div id="p1-tire-bar" class="hud-bar-fill tire-fill"></div>
+              </div>
+            </div>
+            <div class="hud-bar-group">
               <span class="hud-label">FUEL</span>
               <div class="hud-bar-frame">
                 <div id="p1-fuel-bar" class="hud-bar-fill fuel-fill"></div>
@@ -128,6 +146,12 @@
               </div>
             </div>
             <div class="hud-bar-group">
+              <span class="hud-label">TIRES</span>
+              <div class="hud-bar-frame">
+                <div id="p2-tire-bar" class="hud-bar-fill tire-fill"></div>
+              </div>
+            </div>
+            <div class="hud-bar-group">
               <span class="hud-label">FUEL</span>
               <div class="hud-bar-frame">
                 <div id="p2-fuel-bar" class="hud-bar-fill fuel-fill"></div>
@@ -147,7 +171,7 @@
           <div id="p2-pit-msg" class="hud-center-msg hidden">STOP FOR PITSTOP</div>
         </div>
 
-        <!-- Minimap (Bottom-Right Corner, 2x Size) -->
+        <!-- Minimap (Bottom-Right Corner) -->
         <div id="minimap-container" class="hidden">
           <canvas id="minimap-canvas" width="280" height="280"></canvas>
         </div>

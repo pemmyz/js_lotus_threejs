@@ -316,14 +316,14 @@ body.split-screen #hud-p2 {
   left: 10px;
 }
 
-/* Top-Right HUD (ARMOR, FUEL, TURBO, SPEED) */
+/* Top-Right HUD (ARMOR, TIRES, FUEL, TURBO, SPEED) */
 .hud-top-right {
   position: absolute;
   top: clamp(36px, 8.5vmin, 48px);
   right: clamp(10px, 2vmin, 18px);
   display: flex;
   align-items: center;
-  gap: clamp(6px, 1.3vmin, 12px);
+  gap: clamp(5px, 1.1vmin, 10px);
   z-index: 26;
 }
 
@@ -384,7 +384,7 @@ body.split-screen #hud-p2 {
 }
 
 .hud-bar-frame {
-  width: clamp(48px, 11vmin, 76px);
+  width: clamp(44px, 10vmin, 68px);
   height: clamp(7px, 1.6vmin, 10px);
   background: #111;
   border: 1px solid #445;
@@ -410,6 +410,21 @@ body.split-screen #hud-p2 {
 
 @keyframes health-blink {
   from { opacity: 1; background: #ff0000; box-shadow: 0 0 10px #ff0000; }
+  to { opacity: 0.25; }
+}
+
+/* Tire Condition fill */
+.tire-fill {
+  background: linear-gradient(90deg, #ff0044, #ffaa00, #00ffff);
+  box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+.tire-fill.low-tires {
+  animation: tire-blink 0.3s infinite alternate;
+}
+
+@keyframes tire-blink {
+  from { opacity: 1; background: #ff0044; box-shadow: 0 0 10px #ff0044; }
   to { opacity: 0.25; }
 }
 

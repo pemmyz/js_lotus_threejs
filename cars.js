@@ -2,7 +2,7 @@
    AMIGA TURBO RACER - PROCEDURAL CARS & VEHICLE PHYSICS
    Constructs 1990s wedge-shaped supercars with pop-up
    headlights, spoilers, shadows, arcade physics, damage,
-   and pit repairs supporting players and AI competitors.
+   tire wear, and pit repairs supporting players & AI.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -232,8 +232,9 @@ class Car {
     this.lastLapTime = 0;
     this.bestLapTime = null;
 
-    // Car Health / Damage
+    // Car Health & Tires
     this.health = 100.0;
+    this.tires = 100.0; // 100% = brand new, 0% = completely bald
     this.damageSmokeTimer = 0;
 
     // Collision cooldown timer
@@ -290,9 +291,36 @@ class Car {
     this.speed *= Math.pow(this.drag, delta * 60);
     if (this.speed < 0) this.speed = 0;
 
+    // DEV: Infinite Armor (God Mode), Infinite Tires, and Infinite Fuel
+    if (this.isPlayer) {
+      if (window.ATR?.devSettings?.infiniteArmor) {
+        this.health = 100.0;
+      }
+      if (window.ATR?.devSettings?.infiniteTires) {
+        this.tires = 100.0;
+      }
+      if (window.ATR?.devSettings?.infiniteFuel) {
+        this.fuel = 100.0;
+      }
+    }
+
     // Critical Damage penalty (Engine limp-home mode if Armor is 0)
     if (this.health <= 0) {
       this.speed = Math.min(this.speed, 38.0);
+    }
+
+    // Tire Wear Physics: Degrades faster with speed, cornering yaw, and drifting
+    if (this.speed > 8 && !(this.isPlayer && window.ATR?.devSettings?.infiniteTires)) {
+      const turnStress = Math.abs(this.steerYaw || 0) * 1.8;
+      const driftStress = (this.slipTime > 0) ? 2.5 : 0;
+      const wearRate = (0.28 + turnStress + driftStress) * (this.speed / this.maxSpeed);
+      this.tires = Math.max(0, this.tires - wearRate * delta);
+    }
+
+    // Degraded tire grip penalty on acceleration and top speed
+    if (this.tires < 20) {
+      const gripRatio = Math.max(0.4, this.tires / 20);
+      this.speed *= (1.0 - 0.25 * (1.0 - gripRatio) * delta);
     }
 
     // DEV: Infinite Turbo
@@ -311,7 +339,7 @@ class Car {
       this.turbo = Math.min(100, this.turbo + 4.5 * delta);
     }
 
-    if (this.speed > 5) {
+    if (this.speed > 5 && !(this.isPlayer && window.ATR?.devSettings?.infiniteFuel)) {
       this.fuel = Math.max(0, this.fuel - (delta * 0.45) * (this.speed / this.maxSpeed));
       if (this.fuel <= 0) this.speed *= 0.96;
     }
@@ -384,11 +412,12 @@ class Car {
       }
     }
 
-    // Rear Wheel Skid Smoke
+    // Rear Wheel Skid Smoke (higher volume if tires are worn or drifting)
     const isTurning = Math.abs(this.steerYaw) > 0.08 || this.slipTime > 0;
     if (isTurning && this.speed > 8) {
       this.tireSmokeTimer += delta;
-      const intensity = Math.min(1.0, Math.abs(this.steerYaw) * 1.5 + (this.slipTime > 0 ? 0.9 : 0));
+      const tireSlipExtra = this.tires < 30 ? 0.3 : 0;
+      const intensity = Math.min(1.0, Math.abs(this.steerYaw) * 1.5 + (this.slipTime > 0 ? 0.9 : 0) + tireSlipExtra);
       const interval = 0.045 / Math.max(0.6, intensity);
 
       if (this.tireSmokeTimer >= interval) {
@@ -506,7 +535,9 @@ class Car {
   steer(amount, delta) {
     if (this.speed < 2) return;
     const slipFactor = this.slipTime > 0 ? 0.25 : 1.0;
-    this.laneOffset += amount * this.steeringSensitivity * slipFactor * delta;
+    // Grip drops off progressively below 50% tire condition
+    const tireGrip = this.tires < 50 ? Math.max(0.42, 0.42 + (this.tires / 50) * 0.58) : 1.0;
+    this.laneOffset += amount * this.steeringSensitivity * slipFactor * tireGrip * delta;
     this.laneOffset = Math.max(-1.3, Math.min(1.3, this.laneOffset));
     this.steerAngle = amount;
   }
@@ -532,10 +563,15 @@ class Car {
 
   hitHazard(type) {
     const damageEnabled = window.ATR?.devSettings?.obstacleDamage !== false;
+    const isPlayerGod = this.isPlayer && window.ATR?.devSettings?.infiniteArmor;
+    const isPlayerNoTireWear = this.isPlayer && window.ATR?.devSettings?.infiniteTires;
 
     if (type === 'OIL') {
       this.slipTime = 0.8;
-      if (damageEnabled) {
+      if (!isPlayerNoTireWear) {
+        this.tires = Math.max(0, this.tires - 8.0);
+      }
+      if (damageEnabled && !isPlayerGod) {
         this.health = Math.max(0, this.health - 6.0);
       }
       if (this.isPlayer && window.ATR.Audio) window.ATR.Audio.playSkid();
@@ -546,7 +582,11 @@ class Car {
       this.verticalVelocity = 4.5;
       this.altitude = 0.3;
 
-      if (damageEnabled) {
+      if (!isPlayerNoTireWear) {
+        this.tires = Math.max(0, this.tires - 12.0);
+      }
+
+      if (damageEnabled && !isPlayerGod) {
         const damageAmount = (type === 'ROCK' ? 32.0 : 22.0);
         this.health = Math.max(0, this.health - damageAmount);
       }
