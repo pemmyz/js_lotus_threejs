@@ -1,8 +1,8 @@
 /* ===================================================
    AMIGA TURBO RACER - PROCEDURAL RETRO AUDIO SYSTEM
    Synthesizes authentic arcade engine revs, squeals,
-   crash impacts, turbo whoosh, and countdown bleeps
-   using the native Web Audio API (Zero external audio).
+   crash impacts, pit wrench repairs, turbo whoosh,
+   and countdown bleeps using native Web Audio API.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -18,6 +18,7 @@ class AudioSystem {
     // Active engine sound nodes for Player 1 & 2
     this.p1Engine = null;
     this.p2Engine = null;
+    this._repairCooldown = false;
   }
 
   init() {
@@ -104,7 +105,7 @@ class AudioSystem {
     engine.gain.gain.setTargetAtTime(targetGain, t, 0.08);
   }
 
-  // Countdown Beep (low beep for 3, 2, 1; high beep for GO!)
+  // Countdown Beep
   playBeep(isGo = false) {
     if (!this.ctx) this.init();
     if (!this.ctx) return;
@@ -151,6 +152,29 @@ class AudioSystem {
     gain.connect(this.masterGain);
 
     noise.start();
+  }
+
+  // Pitstop Repair / Refuel Ratchet Chime
+  playRepair() {
+    if (!this.ctx || this._repairCooldown) return;
+    this._repairCooldown = true;
+    setTimeout(() => { this._repairCooldown = false; }, 260);
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, this.ctx.currentTime); // D5
+    osc.frequency.setValueAtTime(880, this.ctx.currentTime + 0.08); // A5
+
+    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.22);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.24);
   }
 
   // Turbo Whoosh

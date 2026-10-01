@@ -1,8 +1,8 @@
 /* ===================================================
    AMIGA TURBO RACER - MAIN CONTROLLER & SPLIT ENGINE
    Handles Three.js rendering, horizontal split-screen,
-   responsive full-window scaling, mobile touch controls,
-   car collisions, obstacle interactions, and HUD states.
+   responsive scaling, mobile controls, FPS counter,
+   pitstop service mechanics, damage, and HUD states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -41,9 +41,14 @@ class Game {
     this.mapLayout = 'ORIGINAL';
     this.envType = 'FOREST';
     this.totalLaps = 3;
-    this.aiCount = 3; // Default 3 AI cars (4 total racers)
+    this.aiCount = 3;
     this.counterClockwise = false;
     this.clock = new THREE.Clock();
+
+    // FPS Counter variables
+    this.fpsElement = document.getElementById('fps-counter');
+    this.frameCount = 0;
+    this.lastFpsTime = performance.now();
 
     this.keys = {};
     this.setupInputs();
@@ -57,7 +62,7 @@ class Game {
     this.shakeIntensity = 0;
     this.smokeSystem = null;
 
-    // Minimap references (doubled buffer resolution for 2x crispness)
+    // Minimap references
     this.minimapCanvas = document.getElementById('minimap-canvas');
     if (this.minimapCanvas) {
       this.minimapCanvas.width = 560;
@@ -196,14 +201,13 @@ class Game {
   }
 
   setupUI() {
-    // Utility to bind tap events across Desktop and Mobile Android Chrome reliably
     const bindTap = (element, callback) => {
       if (!element) return;
       let lastTrigger = 0;
 
       const onTrigger = (e) => {
         const now = Date.now();
-        if (now - lastTrigger < 300) return; // Prevent double-fire from touchend + click
+        if (now - lastTrigger < 300) return;
         lastTrigger = now;
 
         if (e.cancelable && e.type !== 'click') {
@@ -244,6 +248,7 @@ class Game {
 
     // --- DEV MENU CONTROLS ---
     window.ATR.devSettings = {
+      obstacleDamage: true,
       disableAiCarCollisions: false,
       disableAiEnvCollisions: false,
       infiniteTurbo: false
@@ -267,6 +272,17 @@ class Game {
       document.addEventListener('touchend', onDocTouch);
     }
 
+    // Damage Checkboxes Synchronization
+    const devDamageCheck = document.getElementById('dev-obstacle-damage');
+    const optDamageCheck = document.getElementById('opt-damage');
+    const onDamageChange = (e) => {
+      window.ATR.devSettings.obstacleDamage = e.target.checked;
+      if (devDamageCheck) devDamageCheck.checked = e.target.checked;
+      if (optDamageCheck) optDamageCheck.checked = e.target.checked;
+    };
+    if (devDamageCheck) devDamageCheck.addEventListener('change', onDamageChange);
+    if (optDamageCheck) optDamageCheck.addEventListener('change', onDamageChange);
+
     document.getElementById('dev-disable-ai-cars')?.addEventListener('change', (e) => {
       window.ATR.devSettings.disableAiCarCollisions = e.target.checked;
     });
@@ -279,6 +295,25 @@ class Game {
       window.ATR.devSettings.infiniteTurbo = e.target.checked;
     });
 
+    // Lap Selector Synchronization (Main Menu & Options)
+    const menuLapsSelect = document.getElementById('menu-laps-select');
+    const optLapsSelect = document.getElementById('opt-laps');
+
+    if (menuLapsSelect) {
+      this.totalLaps = parseInt(menuLapsSelect.value, 10);
+      menuLapsSelect.addEventListener('change', (e) => {
+        this.totalLaps = parseInt(e.target.value, 10);
+        if (optLapsSelect) optLapsSelect.value = e.target.value;
+      });
+    }
+
+    if (optLapsSelect) {
+      optLapsSelect.addEventListener('change', (e) => {
+        this.totalLaps = parseInt(e.target.value, 10);
+        if (menuLapsSelect) menuLapsSelect.value = e.target.value;
+      });
+    }
+
     const aiSelect = document.getElementById('menu-ai-count');
     if (aiSelect) {
       this.aiCount = parseInt(aiSelect.value, 10);
@@ -287,7 +322,7 @@ class Game {
       });
     }
 
-    // --- 50 CARS & ADD +5 CARS HANDLERS (Android Chrome Optimized) ---
+    // 50 Cars & +5 Cars Dev Handlers
     const set50Btn = document.getElementById('dev-set-50-cars');
     if (set50Btn) {
       bindTap(set50Btn, () => {
@@ -304,7 +339,6 @@ class Game {
           aiSelect.value = '50';
         }
 
-        // If currently in a race, instantly spawn up to 50 AI cars on the track
         if (this.track && (this.state === 'RACING' || this.state === 'COUNTDOWN')) {
           const needed = 50 - this.aiCars.length;
           if (needed > 0) {
@@ -320,7 +354,6 @@ class Game {
     const add5Btn = document.getElementById('dev-add-5-cars');
     if (add5Btn) {
       bindTap(add5Btn, () => {
-        // If currently in a race, dynamically spawn 5 cars live on track
         if (this.track && (this.state === 'RACING' || this.state === 'COUNTDOWN')) {
           this.spawnAICars(5);
           this.aiCount = this.aiCars.length;
@@ -346,7 +379,7 @@ class Game {
       });
     }
 
-    // Circuit Map, Dynamic Environment, and Counter-Clockwise Selectors
+    // Circuit Map, Dynamic Environment, and Direction Selectors
     const mapSelect = document.getElementById('menu-map-select');
     const envRow = document.getElementById('menu-env-row');
     const envSelect = document.getElementById('menu-env-select');
@@ -360,7 +393,8 @@ class Game {
         this.envType = envSelect ? envSelect.value : 'FOREST';
       } else {
         if (envRow) envRow.classList.add('hidden');
-        if (this.mapLayout === 'SERPENTINE') this.envType = 'FOREST';
+        if (this.mapLayout === 'TROPICAL') this.envType = 'TROPICAL';
+        else if (this.mapLayout === 'SERPENTINE') this.envType = 'FOREST';
         else if (this.mapLayout === 'DUNES') this.envType = 'DESERT';
         else if (this.mapLayout === 'ALPINE') this.envType = 'MOUNTAIN';
         else if (this.mapLayout === 'FJORD') this.envType = 'SNOW';
@@ -398,6 +432,8 @@ class Game {
         if (envSelect) envSelect.value = this.envType;
       }
       this.totalLaps = parseInt(document.getElementById('opt-laps').value, 10);
+      if (menuLapsSelect) menuLapsSelect.value = this.totalLaps.toString();
+
       const vol = parseInt(document.getElementById('opt-volume').value, 10) / 100;
       window.ATR.Audio.setVolume(vol);
 
@@ -421,8 +457,6 @@ class Game {
     for (let i = 0; i < count; i++) {
       const idx = currentAiCount + i;
       const lane = (idx % 2 === 0 ? 0.35 : -0.35) + (Math.random() - 0.5) * 0.25;
-      
-      // Distribute cars both ahead and behind the reference point so they are visible
       const offset = (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * 0.012;
       const startT = ((refT + offset) % 1.0 + 1.0) % 1.0;
 
@@ -483,7 +517,6 @@ class Game {
     this.allCars = [];
     this.aiCars = [];
 
-    // Clear / initialize particle system
     if (this.smokeSystem) {
       this.smokeSystem.clear();
     } else if (window.ATR.SmokeParticleSystem) {
@@ -491,7 +524,6 @@ class Game {
       window.ATR.smokeSystem = this.smokeSystem;
     }
 
-    // Generate circuit based on layout, environment, and counter-clockwise direction
     const generator = new window.ATR.TrackGenerator();
     const trackData = generator.generate(this.seed, 'MEDIUM', this.envType, 72, this.mapLayout, this.counterClockwise);
     this.track = new window.ATR.Track(this.scene, trackData);
@@ -550,10 +582,8 @@ class Game {
       this.allCars.push(aiCar);
     }
 
-    // Compute initial car placement
     this.allCars.forEach(car => car.updatePhysics(0.001, this.track));
 
-    // Align cameras
     this.snapCameraToCar(this.cameraP1, this.player1);
     if (this.player2) {
       this.snapCameraToCar(this.cameraP2, this.player2);
@@ -630,16 +660,37 @@ class Game {
     if (steerR) player.steer(1, delta);
     if (turbo) player.activateTurbo();
 
+    // Pitstop trigger & roadside service handling
     if (this.track.pitZone) {
       const pDist = player.mesh.position.distanceTo(this.track.pitZone.center);
-      const isRefueling = (pDist < 14.0 && player.speed < 45.0);
+      const inPitArea = pDist < 16.0;
+      const isStopped = player.speed < 20.0;
       const pitTag = document.getElementById(isP1 ? 'p1-pit-msg' : 'p2-pit-msg');
 
-      if (isRefueling) {
-        player.fuel = Math.min(100, player.fuel + 40 * delta);
-        if (pitTag) pitTag.classList.remove('hidden');
-      } else {
-        if (pitTag) pitTag.classList.add('hidden');
+      if (pitTag) {
+        if (inPitArea) {
+          pitTag.classList.remove('hidden');
+          if (!isStopped) {
+            pitTag.className = 'hud-center-msg';
+            pitTag.innerText = 'STOP FOR PITSTOP';
+          } else {
+            const needsFuel = player.fuel < 100;
+            const needsArmor = player.health < 100;
+
+            if (needsFuel || needsArmor) {
+              pitTag.className = 'hud-center-msg pit-servicing';
+              pitTag.innerText = 'PIT SERVICING...';
+              player.fuel = Math.min(100, player.fuel + 45 * delta);
+              player.health = Math.min(100, player.health + 40 * delta);
+              if (window.ATR.Audio) window.ATR.Audio.playRepair();
+            } else {
+              pitTag.className = 'hud-center-msg pit-complete';
+              pitTag.innerText = 'SERVICE COMPLETE! GO!';
+            }
+          }
+        } else {
+          pitTag.classList.add('hidden');
+        }
       }
     }
 
@@ -656,35 +707,30 @@ class Game {
       for (let j = i + 1; j < count; j++) {
         const b = cars[j];
 
-        // DEV: Skip collision if either car is AI and AI car collisions are disabled
         if (window.ATR?.devSettings?.disableAiCarCollisions && (!a.isPlayer || !b.isPlayer)) {
           continue;
         }
 
         const dist = a.mesh.position.distanceTo(b.mesh.position);
         if (dist < 2.8) {
-          // Push cars apart sideways
           const laneDiff = a.laneOffset - b.laneOffset;
           const pushDir = Math.abs(laneDiff) > 0.04 ? Math.sign(laneDiff) : (Math.random() > 0.5 ? 1 : -1);
           a.laneOffset = Math.max(-1.25, Math.min(1.25, a.laneOffset + pushDir * 0.16));
           b.laneOffset = Math.max(-1.25, Math.min(1.25, b.laneOffset - pushDir * 0.16));
 
-          // Impact penalty: slow down cars
           if (a.collisionCooldown <= 0 || b.collisionCooldown <= 0) {
-            const slowFactor = 0.82; // 18% speed loss per collision
+            const slowFactor = 0.82;
             a.speed = Math.max(0, a.speed * slowFactor);
             b.speed = Math.max(0, b.speed * slowFactor);
 
             a.collisionCooldown = 0.35;
             b.collisionCooldown = 0.35;
 
-            // Audio & Camera Shake if player car involved
             if (a.isPlayer || b.isPlayer) {
               if (this.shakeIntensity < 0.85) this.shakeIntensity = 0.85;
               if (window.ATR.Audio) window.ATR.Audio.playCrash();
             }
 
-            // Impact sparks / smoke
             if (window.ATR.smokeSystem) {
               const mid = a.mesh.position.clone().add(b.mesh.position).multiplyScalar(0.5);
               window.ATR.smokeSystem.emit({
@@ -707,7 +753,6 @@ class Game {
     if (!this.track || !this.track.obstacles) return;
 
     for (let car of this.allCars) {
-      // DEV: Skip hazard checks for AI if AI env collisions are disabled
       if (window.ATR?.devSettings?.disableAiEnvCollisions && !car.isPlayer) {
         continue;
       }
@@ -743,12 +788,11 @@ class Game {
 
     const speedRatio = car.speed / car.maxSpeed;
 
-    // Dynamically balance FOV so the track doesn't look zoomed-in on mobile aspects
     let baseFov = 70;
     if (aspect < 1.0) {
-      baseFov = 92; // Mobile portrait
+      baseFov = 92;
     } else if (aspect < 1.45) {
-      baseFov = 78; // Compact/tablet screens
+      baseFov = 78;
     }
 
     camera.fov = baseFov + speedRatio * 10.0;
@@ -784,6 +828,13 @@ class Game {
     const timeEl = document.getElementById(`${hudPrefix}-time`);
     if (timeEl) {
       timeEl.innerText = this.formatTime(player.currentLapTime);
+    }
+
+    // Health / Armor HUD Bar
+    const healthBar = document.getElementById(`${hudPrefix}-health-bar`);
+    if (healthBar) {
+      healthBar.style.width = `${Math.max(0, player.health)}%`;
+      healthBar.classList.toggle('low-health', player.health < 25);
     }
 
     const fuelBar = document.getElementById(`${hudPrefix}-fuel-bar`);
@@ -827,7 +878,7 @@ class Game {
     const ctx = this.minimapCtx;
     const w = this.minimapCanvas.width;
     const h = this.minimapCanvas.height;
-    const pad = 36; // Scaled proportionally for 560x560 canvas
+    const pad = 36;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -840,7 +891,7 @@ class Game {
       y: pad + ((z - minZ) / spanZ) * (h - pad * 2)
     });
 
-    // 1. Draw Track Ribbon (Scaled 2x for 560x560)
+    // Track Ribbon
     ctx.beginPath();
     const first = toMap(this.minimapTrackPoints[0].x, this.minimapTrackPoints[0].z);
     ctx.moveTo(first.x, first.y);
@@ -860,14 +911,14 @@ class Game {
     ctx.lineWidth = 7;
     ctx.stroke();
 
-    // 2. Start/Finish Line Indicator
+    // Start/Finish Line Indicator
     const finishPos = toMap(this.track.spline.getPointAt(0.01).x, this.track.spline.getPointAt(0.01).z);
     ctx.fillStyle = '#ff0055';
     ctx.beginPath();
     ctx.arc(finishPos.x, finishPos.y, 9, 0, Math.PI * 2);
     ctx.fill();
 
-    // 3. AI Racers
+    // AI Racers
     for (let i = 0; i < this.aiCars.length; i++) {
       const car = this.aiCars[i].car;
       const pos = toMap(car.mesh.position.x, car.mesh.position.z);
@@ -877,7 +928,7 @@ class Game {
       ctx.fill();
     }
 
-    // 4. Player 2 (Cyan with white rim)
+    // Player 2
     if (this.player2) {
       const p2Pos = toMap(this.player2.mesh.position.x, this.player2.mesh.position.z);
       ctx.fillStyle = '#00c3ff';
@@ -889,7 +940,7 @@ class Game {
       ctx.stroke();
     }
 
-    // 5. Player 1 (Red with white rim)
+    // Player 1
     if (this.player1) {
       const p1Pos = toMap(this.player1.mesh.position.x, this.player1.mesh.position.z);
       ctx.fillStyle = '#ff2244';
@@ -945,7 +996,6 @@ class Game {
       this.smokeSystem.clear();
     }
 
-    // Clean up race cars from the scene
     this.allCars.forEach(c => this.scene.remove(c.mesh));
     this.allCars = [];
     this.aiCars = [];
@@ -959,6 +1009,16 @@ class Game {
     const delta = Math.min(this.clock.getDelta(), 0.1);
     const width = window.innerWidth;
     const height = window.innerHeight;
+
+    // Real-Time Arcade FPS Counter update
+    this.frameCount++;
+    const now = performance.now();
+    if (now - this.lastFpsTime >= 500) {
+      const fps = Math.round((this.frameCount * 1000) / (now - this.lastFpsTime));
+      if (this.fpsElement) this.fpsElement.innerText = `FPS: ${fps}`;
+      this.frameCount = 0;
+      this.lastFpsTime = now;
+    }
 
     if (this.state === 'MENU') {
       this.showcaseCar.rotation.y += delta * 0.8;
@@ -988,11 +1048,9 @@ class Game {
     if (this.player1) this.player1.updatePhysics(delta, this.track);
     if (this.player2) this.player2.updatePhysics(delta, this.track);
 
-    // Collision detection
     this.handleCarCollisions(delta);
     this.checkObstacleCollisions();
 
-    // Update smoke particles
     if (this.smokeSystem) {
       this.smokeSystem.update(delta);
     }

@@ -1,8 +1,8 @@
 /* ===================================================
    AMIGA TURBO RACER - PROCEDURAL CARS & VEHICLE PHYSICS
    Constructs 1990s wedge-shaped supercars with pop-up
-   headlights, spoilers, shadows, and arcade physics
-   supporting human players and competing AI racers.
+   headlights, spoilers, shadows, arcade physics, damage,
+   and pit repairs supporting players and AI competitors.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -232,6 +232,10 @@ class Car {
     this.lastLapTime = 0;
     this.bestLapTime = null;
 
+    // Car Health / Damage
+    this.health = 100.0;
+    this.damageSmokeTimer = 0;
+
     // Collision cooldown timer
     this.collisionCooldown = 0;
 
@@ -286,7 +290,12 @@ class Car {
     this.speed *= Math.pow(this.drag, delta * 60);
     if (this.speed < 0) this.speed = 0;
 
-    // DEV: Keep turbo locked at max if Infinite Turbo is active for player
+    // Critical Damage penalty (Engine limp-home mode if Armor is 0)
+    if (this.health <= 0) {
+      this.speed = Math.min(this.speed, 38.0);
+    }
+
+    // DEV: Infinite Turbo
     if (this.isPlayer && window.ATR?.devSettings?.infiniteTurbo) {
       this.turbo = 100.0;
     }
@@ -351,7 +360,31 @@ class Car {
 
     this.mesh.updateMatrixWorld(true);
 
-    // 1. REAR WHEEL TIRE SMOKE
+    // Damage Engine Smoke if car Armor is degraded
+    if (this.health < 40) {
+      this.damageSmokeTimer += delta;
+      const smokeInterval = this.health <= 0 ? 0.035 : 0.09;
+      if (this.damageSmokeTimer >= smokeInterval) {
+        this.damageSmokeTimer = 0;
+        const hoodWorld = this.mesh.localToWorld(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.7, -1.2));
+        window.ATR.smokeSystem.emit({
+          position: hoodWorld,
+          velocity: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.6,
+            1.2 + Math.random() * 0.8,
+            (Math.random() - 0.5) * 0.6
+          ),
+          startSize: 0.5,
+          endSize: 2.2 + Math.random() * 0.6,
+          startOpacity: 0.85,
+          maxLife: 0.7 + Math.random() * 0.3,
+          color: this.health <= 0 ? 0x222225 : 0x777777,
+          rotSpeed: (Math.random() - 0.5) * 2.5
+        });
+      }
+    }
+
+    // Rear Wheel Skid Smoke
     const isTurning = Math.abs(this.steerYaw) > 0.08 || this.slipTime > 0;
     if (isTurning && this.speed > 8) {
       this.tireSmokeTimer += delta;
@@ -397,7 +430,7 @@ class Car {
       }
     }
 
-    // 2. EXHAUST SMOKE
+    // Exhaust Smoke
     this.exhaustTimer += delta;
     const isStanding = this.speed < 4.0;
     const exhaustInterval = isStanding ? 0.13 : Math.max(0.025, 0.08 - (this.speed / this.maxSpeed) * 0.05);
@@ -498,8 +531,13 @@ class Car {
   }
 
   hitHazard(type) {
+    const damageEnabled = window.ATR?.devSettings?.obstacleDamage !== false;
+
     if (type === 'OIL') {
       this.slipTime = 0.8;
+      if (damageEnabled) {
+        this.health = Math.max(0, this.health - 6.0);
+      }
       if (this.isPlayer && window.ATR.Audio) window.ATR.Audio.playSkid();
     } else if (type === 'LOG' || type === 'ROCK') {
       if (this.hazardCooldown > 0) return;
@@ -507,6 +545,12 @@ class Car {
       this.speed = Math.max(0, this.speed * 0.28);
       this.verticalVelocity = 4.5;
       this.altitude = 0.3;
+
+      if (damageEnabled) {
+        const damageAmount = (type === 'ROCK' ? 32.0 : 22.0);
+        this.health = Math.max(0, this.health - damageAmount);
+      }
+
       if (this.isPlayer && window.ATR.Audio) window.ATR.Audio.playCrash();
     }
   }
@@ -529,7 +573,7 @@ class AIController {
       this.car.speed *= 0.995;
     }
 
-    // 1. Predictive Obstacle Avoidance (Logs, Rocks, Oil Slicks)
+    // Predictive Obstacle Avoidance
     let isAvoidingObstacle = false;
     if (this.track && this.track.obstacles) {
       for (let obs of this.track.obstacles) {
@@ -538,12 +582,10 @@ class AIController {
         if (dt > 0.5) dt -= 1.0;
         const distAhead = dt * this.track.totalLength;
 
-        // Danger range: 4m to 65m ahead
         if (distAhead > 4.0 && distAhead < 65.0) {
           isAvoidingObstacle = true;
 
           if (obs.type === 'LOG' || obs.type === 'ROCK') {
-            // Side -1 = left half blocked -> steer to right (+0.6), otherwise steer left (-0.6)
             this.targetLane = obs.side === -1 ? 0.6 : -0.6;
           } else if (obs.type === 'OIL') {
             const roadInfo = this.track.getRoadTransformAt(obs.t);
@@ -552,7 +594,6 @@ class AIController {
             this.targetLane = oilSide > 0 ? -0.65 : 0.65;
           }
 
-          // Emergency brake if imminent collision path
           const inHazardPath = (obs.side === -1 && this.car.laneOffset < 0.15) ||
                                (obs.side === 1 && this.car.laneOffset > -0.15);
           if (distAhead < 22.0 && inHazardPath) {
@@ -563,7 +604,7 @@ class AIController {
       }
     }
 
-    // 2. Predictive Car-to-Car Avoidance (dodge players and fellow AI)
+    // Predictive Car-to-Car Avoidance
     if (!isAvoidingObstacle) {
       for (let other of allCars) {
         if (other === this.car) continue;
@@ -573,16 +614,13 @@ class AIController {
         if (dt > 0.5) dt -= 1.0;
         const distAhead = dt * this.track.totalLength;
 
-        // Vehicle is right ahead within passing/braking range
         if (distAhead > 0.5 && distAhead < 24.0) {
           const laneDiff = other.laneOffset - this.car.laneOffset;
           if (Math.abs(laneDiff) < 0.45) {
-            // Veer toward whatever lane offers an open path
             this.targetLane = other.laneOffset > 0
               ? Math.max(-0.75, this.car.laneOffset - 0.55)
               : Math.min(0.75, this.car.laneOffset + 0.55);
 
-            // Back off the throttle if closing in too quickly
             if (distAhead < 10.0 && this.car.speed > other.speed) {
               this.car.speed = Math.max(0, this.car.speed - 30.0 * delta);
             }
@@ -591,7 +629,7 @@ class AIController {
       }
     }
 
-    // 3. Regular Lane Wandering
+    // Regular Lane Wandering
     if (!isAvoidingObstacle) {
       this.laneChangeTimer -= delta;
       if (this.laneChangeTimer <= 0) {
@@ -600,7 +638,6 @@ class AIController {
       }
     }
 
-    // 4. Steer toward target lane (sharper steering when dodging)
     const diff = this.targetLane - this.car.laneOffset;
     if (Math.abs(diff) > 0.05) {
       const steerForce = isAvoidingObstacle ? 1.6 : 0.85;

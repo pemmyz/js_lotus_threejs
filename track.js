@@ -1,10 +1,9 @@
 /* ===================================================
    AMIGA TURBO RACER - PROCEDURAL TRACK GENERATOR
    Creates dynamic 3D ribbon road geometry, Catmull-Rom
-   spline elevation, smooth non-overlapping turns,
-   roadside signs, scenery (trees, saguaro cacti, snowy pines,
-   large boulders, logs, oil), central terrain mountain,
-   and pit lane. Supports Clockwise & Counter-Clockwise directions.
+   spline elevation, roadside signs, scenery (trees,
+   saguaro cacti, snowy pines, tropical palm trees, boulders,
+   logs, oil slicks), pit lane and pitstop service bay.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -15,7 +14,6 @@ class TrackGenerator {
     this.shoulderWidth = 2.4;
   }
 
-  // Deterministic PRNG seeded random
   createPRNG(seed) {
     let s = seed % 2147483647;
     if (s <= 0) s += 2147483646;
@@ -30,7 +28,6 @@ class TrackGenerator {
     const rawRadii = new Float32Array(numWaypoints);
     const elevations = new Float32Array(numWaypoints);
 
-    // Layout-specific geometry bases and elevation profiles
     const p1 = random() * Math.PI * 2;
     const p2 = random() * Math.PI * 2;
     let hillScale = difficulty === 'HARD' ? 13.0 : 8.0;
@@ -41,9 +38,11 @@ class TrackGenerator {
       hillScale = 4.5;
     } else if (mapLayout === 'DUNES') {
       hillScale = 7.0;
+    } else if (mapLayout === 'TROPICAL') {
+      hillScale = 6.5;
     }
 
-    // 1. Generate unique macro-shapes per layout
+    // 1. Generate unique macro-shapes per layout (Original layouts untouched)
     for (let i = 0; i < numWaypoints; i++) {
       let angle = (i / numWaypoints) * Math.PI * 2;
       if (counterClockwise) {
@@ -52,8 +51,16 @@ class TrackGenerator {
 
       let r = 290;
 
-      if (mapLayout === 'SERPENTINE') {
-        // High-rhythm technical S-curves and esses
+      if (mapLayout === 'TROPICAL') {
+        // Lotus Esprit Turbo Challenge Pacific / Tropical Atoll circuit:
+        // Sweeping island ocean bends and wide tropical turns
+        const rx = 245 + random() * 20;
+        const rz = 365 + random() * 25;
+        const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
+        const islandEsses = Math.sin(angle * 3 + p1) * 48 + Math.cos(angle * 5 + p2) * 24;
+        r = base + islandEsses;
+
+      } else if (mapLayout === 'SERPENTINE') {
         const rx = 230 + random() * 25;
         const rz = 360 + random() * 30;
         const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
@@ -61,7 +68,6 @@ class TrackGenerator {
         r = base + sCurves;
 
       } else if (mapLayout === 'DUNES') {
-        // Asymmetric desert circuit: wide parabolic sweeper into canyon chicane
         const rx = 245 + Math.sin(angle) * 45;
         const rz = 370 + random() * 25;
         const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
@@ -69,13 +75,11 @@ class TrackGenerator {
         r = base + dunesWiggle;
 
       } else if (mapLayout === 'ALPINE') {
-        // Mountain perimeter triangle with 3 distinct apex sectors
         const triLobe = Math.cos(angle * 3 + p1) * 62;
         const technical = Math.sin(angle * 6 + p2) * 26;
         r = 295 + triLobe + technical;
 
       } else if (mapLayout === 'FJORD') {
-        // Elongated coastal fjord with crisp peninsula turns and fjord cuts
         const rx = 210 + random() * 20;
         const rz = 390 + random() * 30;
         const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
@@ -83,8 +87,7 @@ class TrackGenerator {
         r = base + coastalBays;
 
       } else if (mapLayout === 'MIDNIGHT') {
-        // Crisp street-circuit corners connected by high-speed straights
-        const p = 3.2; // Super-ellipse formula creates defined 90-degree-style arcade corners
+        const p = 3.2;
         const cosA = Math.cos(angle + p1);
         const sinA = Math.sin(angle + p1);
         const rx = 240 + random() * 25;
@@ -93,7 +96,7 @@ class TrackGenerator {
         r = superR + Math.sin(angle * 4 + p2) * 32 + Math.cos(angle * 7) * 14;
 
       } else {
-        // ORIGINAL: Classic Grand Prix circuit with balanced fast turns
+        // ORIGINAL: Classic Grand Prix circuit
         const rx = 240 + random() * 30;
         const rz = 370 + random() * 35;
         const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
@@ -106,17 +109,13 @@ class TrackGenerator {
       const neutralRadius = 310;
       r = neutralRadius * (1.0 - straightBlend) + r * straightBlend;
 
-      // Safe bounds: clears central mountain (min 185m) and terrain plane
       rawRadii[i] = Math.max(185, Math.min(415, r));
 
-      // Elevation profile per layout
       let y = (Math.sin(angle * 3) * hillScale + Math.cos(angle * 5) * (hillScale * 0.45)) * straightBlend;
       elevations[i] = Math.max(0, y);
     }
 
-    // 2. Slope Limiter & Smooth Relax Pass:
-    // Limits radial delta between consecutive waypoints (<= 14.5m) to guarantee turns stay
-    // sharp and snappy without turning into hairpins.
+    // 2. Slope Limiter & Smooth Relax Pass
     const maxDelta = 14.5;
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 0; i < numWaypoints; i++) {
@@ -128,7 +127,6 @@ class TrackGenerator {
       }
     }
 
-    // Gentle 3-point smoothing filter removes micro-kinks
     const finalRadii = new Float32Array(numWaypoints);
     for (let i = 0; i < numWaypoints; i++) {
       const prev = (i - 1 + numWaypoints) % numWaypoints;
@@ -136,7 +134,7 @@ class TrackGenerator {
       finalRadii[i] = rawRadii[prev] * 0.22 + rawRadii[i] * 0.56 + rawRadii[next] * 0.22;
     }
 
-    // 3. Assemble Control Points (Monotonic polar curve guarantees zero self-overlaps)
+    // 3. Assemble Control Points
     const controlPoints = [];
     for (let i = 0; i < numWaypoints; i++) {
       let angle = (i / numWaypoints) * Math.PI * 2;
@@ -150,7 +148,6 @@ class TrackGenerator {
       controlPoints.push(new THREE.Vector3(x, y, z));
     }
 
-    // Centripetal Catmull-Rom prevents overshoots or loops at corner vertices
     const spline = new THREE.CatmullRomCurve3(controlPoints, true, 'centripetal');
 
     return {
@@ -203,6 +200,14 @@ class Track {
     };
 
     switch (this.data.envType) {
+      case 'TROPICAL':
+        this.theme.skyColor = 0x22a6b3; // Bright tropical turquoise sky
+        this.theme.fogColor = 0x7ed6df;
+        this.theme.groundColor = 0x27ae60; // Vibrant island grass
+        this.theme.treeLeaves = [0x2ecc71, 0x1abc9c, 0x10ac84];
+        this.theme.fogNear = 140;
+        this.theme.fogFar = 860;
+        break;
       case 'DESERT':
         this.theme.skyColor = 0xf4a261;
         this.theme.fogColor = 0xe9c46a;
@@ -234,7 +239,6 @@ class Track {
     this.scene.fog = new THREE.Fog(this.theme.fogColor, this.theme.fogNear, this.theme.fogFar);
   }
 
-  // Generate 3D Ribbon Road Geometry
   buildRoadMesh() {
     const samples = 1200;
     const roadHalfWidth = this.roadWidth * 0.5;
@@ -253,7 +257,6 @@ class Track {
       const tangent = this.spline.getTangentAt(t).normalize();
       const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-      // Checkpoint recording
       if (i % 50 === 0) {
         this.checkpoints.push({
           index: this.checkpoints.length,
@@ -262,7 +265,6 @@ class Track {
         });
       }
 
-      // Road Surface vertices (- is left, + is right)
       const leftEdge = point.clone().addScaledVector(normal, -roadHalfWidth);
       const rightEdge = point.clone().addScaledVector(normal, roadHalfWidth);
 
@@ -272,7 +274,6 @@ class Track {
       roadUvs.push(0, i * 0.5);
       roadUvs.push(1, i * 0.5);
 
-      // Shoulders (red and white curbs)
       const shoulderLeftOuter = point.clone().addScaledVector(normal, -(roadHalfWidth + shoulderWidth));
       const shoulderRightOuter = point.clone().addScaledVector(normal, (roadHalfWidth + shoulderWidth));
 
@@ -292,7 +293,6 @@ class Track {
       }
     }
 
-    // Road Indices
     const roadIndices = [];
     for (let i = 0; i < samples; i++) {
       const idx = i * 2;
@@ -300,7 +300,6 @@ class Track {
       roadIndices.push(idx + 1, idx + 3, idx + 2);
     }
 
-    // Shoulder Indices
     const shoulderIndices = [];
     for (let i = 0; i < samples; i++) {
       const idx = i * 4;
@@ -310,7 +309,6 @@ class Track {
       shoulderIndices.push(idx + 3, idx + 7, idx + 6);
     }
 
-    // Build Road BufferGeometry
     const roadGeo = new THREE.BufferGeometry();
     roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(roadPositions, 3));
     roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(roadUvs, 2));
@@ -331,7 +329,6 @@ class Track {
     this.roadMesh = new THREE.Mesh(roadGeo, roadMat);
     this.scene.add(this.roadMesh);
 
-    // Build Shoulder BufferGeometry
     const shoulderGeo = new THREE.BufferGeometry();
     shoulderGeo.setAttribute('position', new THREE.Float32BufferAttribute(shoulderPositions, 3));
     shoulderGeo.setAttribute('color', new THREE.Float32BufferAttribute(shoulderColors, 3));
@@ -386,7 +383,6 @@ class Track {
     this.scene.add(this.terrainMesh);
   }
 
-  // Central low-poly mountain rising in the middle of the island
   buildCenterMountain() {
     const mountainGroup = new THREE.Group();
     const peakGeo = new THREE.ConeGeometry(95, 110, 9, 3);
@@ -407,7 +403,6 @@ class Track {
     const cap = new THREE.Mesh(capGeo, capMat);
     cap.position.set(0, 88, 0);
 
-    // Flanking secondary peaks
     const subPeakGeo = new THREE.ConeGeometry(65, 75, 7);
     const subPeak1 = new THREE.Mesh(subPeakGeo, peakMat);
     subPeak1.position.set(50, 36, -30);
@@ -454,25 +449,110 @@ class Track {
     this.sceneryGroup.add(bannerGroup);
   }
 
+  // Pitstop Service Bay & Traffic Sign positioned right after finish line
   buildPitLane() {
-    const pitPoint = this.spline.getPointAt(0.06);
-    const tangent = this.spline.getTangentAt(0.06).normalize();
+    const pitGroup = new THREE.Group();
     const up = new THREE.Vector3(0, 1, 0);
+
+    // 1. Retro Pitstop Entry Traffic Sign (Lotus / Amiga arcade style) at t = 0.026
+    const signT = 0.026;
+    const signPoint = this.spline.getPointAt(signT);
+    const signTangent = this.spline.getTangentAt(signT).normalize();
+    const signNormal = new THREE.Vector3().crossVectors(signTangent, up).normalize();
+
+    const pitSignGroup = this.createPitTrafficSign();
+    pitSignGroup.position.copy(signPoint).addScaledVector(signNormal, 9.5);
+    pitSignGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), signTangent.clone().negate());
+    pitGroup.add(pitSignGroup);
+
+    // 2. Main Pit Stop Zone (Around t = 0.052)
+    const pitPoint = this.spline.getPointAt(0.052);
+    const tangent = this.spline.getTangentAt(0.052).normalize();
     const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
+    // Pitstop roadside service shelter
     const pitBuilding = new THREE.Mesh(
-      new THREE.BoxGeometry(5, 5, 30),
-      new THREE.MeshStandardMaterial({ color: 0x334466 })
+      new THREE.BoxGeometry(6, 4.5, 24),
+      new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 })
     );
-    pitBuilding.position.copy(pitPoint).addScaledVector(normal, 14).setY(2.5);
+    pitBuilding.position.copy(pitPoint).addScaledVector(normal, 15).setY(2.25);
     pitBuilding.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    pitGroup.add(pitBuilding);
 
-    this.sceneryGroup.add(pitBuilding);
+    // Pitstop Service Overhead Canopy
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(8, 0.4, 25),
+      new THREE.MeshStandardMaterial({ color: 0xffee00, roughness: 0.5 })
+    );
+    roof.position.copy(pitPoint).addScaledVector(normal, 12).setY(4.5);
+    roof.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    pitGroup.add(roof);
+
+    // Pit Bay Roadside Asphalt Apron with Yellow Hazard Stripes
+    const apron = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 28),
+      new THREE.MeshBasicMaterial({ color: 0x18181b, side: THREE.DoubleSide })
+    );
+    apron.rotation.x = -Math.PI / 2;
+    apron.position.copy(pitPoint).addScaledVector(normal, 11).setY(0.07);
+    apron.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    apron.rotateX(-Math.PI / 2);
+    pitGroup.add(apron);
+
+    // Pit Bay Traffic Cones
+    for (let c = -2; c <= 2; c++) {
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.35, 1.0, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff4400 })
+      );
+      cone.position.copy(pitPoint).addScaledVector(normal, 7.8).addScaledVector(tangent, c * 5).setY(0.5);
+      pitGroup.add(cone);
+    }
+
+    this.sceneryGroup.add(pitGroup);
+
+    // Set interactive pitstop trigger zone immediately following finish line
     this.pitZone = {
-      tStart: 0.04,
-      tEnd: 0.08,
+      tStart: 0.024,
+      tEnd: 0.082,
       center: pitPoint.clone().addScaledVector(normal, 8)
     };
+  }
+
+  createPitTrafficSign() {
+    const group = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2), new THREE.MeshBasicMaterial({ color: 0xcccccc }));
+    pole.position.y = 2.1;
+
+    const boardCanvas = document.createElement('canvas');
+    boardCanvas.width = 128;
+    boardCanvas.height = 64;
+    const ctx = boardCanvas.getContext('2d');
+
+    // Blue retro signboard with white border
+    ctx.fillStyle = '#0066cc';
+    ctx.fillRect(0, 0, 128, 64);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 124, 60);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIT STOP', 64, 27);
+
+    ctx.font = 'bold 24px monospace';
+    ctx.fillStyle = '#ffee00';
+    ctx.fillText('➔ ➔', 64, 52);
+
+    const board = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.2, 1.6),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas), side: THREE.DoubleSide })
+    );
+    board.position.y = 3.2;
+
+    group.add(pole, board);
+    return group;
   }
 
   buildRoadsideScenery() {
@@ -481,17 +561,23 @@ class Track {
 
     for (let i = 0; i < numObjects; i++) {
       const t = (i / numObjects + 0.02) % 1.0;
+
+      // Keep roadside scenery clear of the pit lane area (t ~ 0.02 to 0.09 on right side)
+      const side = (i % 2 === 0) ? 1 : -1;
+      if (side === 1 && t > 0.02 && t < 0.09) continue;
+
       const point = this.spline.getPointAt(t);
       const tangent = this.spline.getTangentAt(t).normalize();
       const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-      const side = (i % 2 === 0) ? 1 : -1;
       const distFromRoad = 11 + (i % 5) * 6;
       const objPos = point.clone().addScaledVector(normal, side * distFromRoad);
 
       if (i % 3 === 0) {
         let plant;
-        if (this.data.envType === 'DESERT') {
+        if (this.data.envType === 'TROPICAL') {
+          plant = this.createPalmTreeMesh();
+        } else if (this.data.envType === 'DESERT') {
           plant = this.createCactusMesh();
         } else if (this.data.envType === 'SNOW') {
           plant = this.createSnowyPineMesh();
@@ -514,6 +600,66 @@ class Track {
     }
   }
 
+  // Low-poly Palm Tree (Lotus Esprit Turbo Challenge Style)
+  createPalmTreeMesh() {
+    const group = new THREE.Group();
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4b26, roughness: 0.9, flatShading: true });
+    const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x1f9947, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
+    const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
+    const nutMat = new THREE.MeshStandardMaterial({ color: 0x4e3019, roughness: 0.9, flatShading: true });
+
+    // Segmented curved trunk
+    const segments = 5;
+    let prevHeight = 0;
+    const trunkLean = (Math.random() - 0.5) * 0.14;
+
+    for (let s = 0; s < segments; s++) {
+      const segH = 1.3;
+      const bottomR = 0.42 - s * 0.04;
+      const topR = 0.38 - s * 0.04;
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(topR, bottomR, segH, 6), trunkMat);
+      seg.position.set(s * trunkLean * 2.0, prevHeight + segH * 0.5, 0);
+      seg.rotation.z = -trunkLean * (s + 1) * 0.4;
+      group.add(seg);
+      prevHeight += segH * 0.95;
+    }
+
+    const topX = (segments - 1) * trunkLean * 2.0;
+    const topY = prevHeight + 0.2;
+
+    // Coconuts cluster beneath fronds
+    for (let c = 0; c < 3; c++) {
+      const angle = (c / 3) * Math.PI * 2;
+      const nut = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24, 0), nutMat);
+      nut.position.set(topX + Math.sin(angle) * 0.35, topY - 0.2, Math.cos(angle) * 0.35);
+      group.add(nut);
+    }
+
+    // Arching fan palm fronds
+    const numFronds = 7;
+    for (let f = 0; f < numFronds; f++) {
+      const frondAngle = (f / numFronds) * Math.PI * 2 + Math.random() * 0.2;
+      const frondGroup = new THREE.Group();
+
+      const leafGeo = new THREE.ConeGeometry(0.85, 3.8, 4);
+      leafGeo.rotateZ(Math.PI / 2);
+      const leaf = new THREE.Mesh(leafGeo, f % 2 === 0 ? leafMat1 : leafMat2);
+      leaf.position.x = 1.8;
+      leaf.scale.set(1.0, 0.12, 1.0);
+
+      frondGroup.add(leaf);
+      frondGroup.position.set(topX, topY, 0);
+      frondGroup.rotation.y = frondAngle;
+      frondGroup.rotation.z = 0.42 + (f % 2) * 0.18;
+
+      group.add(frondGroup);
+    }
+
+    const scale = 0.85 + Math.random() * 0.4;
+    group.scale.set(scale, scale, scale);
+    return group;
+  }
+
   createTreeMesh() {
     const group = new THREE.Group();
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.9 });
@@ -534,7 +680,6 @@ class Track {
     return group;
   }
 
-  // Saguaro Cactus for Desert Maps
   createCactusMesh() {
     const group = new THREE.Group();
     const cactusMat = new THREE.MeshStandardMaterial({ color: 0x2e6f40, roughness: 0.85, flatShading: true });
@@ -544,7 +689,6 @@ class Track {
     trunk.position.y = height * 0.5;
     group.add(trunk);
 
-    // Left Arm
     const armLHoriz = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.2, 6), cactusMat);
     armLHoriz.rotation.z = Math.PI / 2;
     armLHoriz.position.set(-0.6, height * 0.52, 0);
@@ -552,7 +696,6 @@ class Track {
     armLVert.position.set(-1.1, height * 0.52 + 0.6, 0);
     group.add(armLHoriz, armLVert);
 
-    // Right Arm (staggered height)
     const armRHoriz = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.0, 6), cactusMat);
     armRHoriz.rotation.z = Math.PI / 2;
     armRHoriz.position.set(0.5, height * 0.65, 0);
@@ -565,7 +708,6 @@ class Track {
     return group;
   }
 
-  // Snow-covered Pine Tree for Winter / Snow Maps
   createSnowyPineMesh() {
     const group = new THREE.Group();
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d271d, roughness: 0.9 });
@@ -596,7 +738,7 @@ class Track {
   createRockMesh(isBig = false) {
     const radius = isBig ? (3.8 + Math.random() * 2.8) : (1.4 + Math.random() * 1.2);
     const geo = new THREE.DodecahedronGeometry(radius, 0);
-    const rockColor = this.data.envType === 'DESERT' ? 0x9e6a45 : 0x777788;
+    const rockColor = this.data.envType === 'DESERT' ? 0x9e6a45 : (this.data.envType === 'TROPICAL' ? 0x55606d : 0x777788);
     const mat = new THREE.MeshStandardMaterial({ color: rockColor, roughness: 0.9, flatShading: true });
     const rock = new THREE.Mesh(geo, mat);
     rock.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
@@ -685,6 +827,7 @@ class Track {
     const minLogSpacingMeters = this.roadWidth * 2.4;
     const minSpacingT = minLogSpacingMeters / this.totalLength;
 
+    // Start obstacle generation well after the pit area (t > 0.13)
     let currentT = 0.13;
     let patternCounter = 0;
 
@@ -764,7 +907,6 @@ class Track {
     });
   }
 
-  // Get Road Center, Tangent, and Normal at normalized distance t (0.0 to 1.0)
   getRoadTransformAt(t) {
     const normalizedT = ((t % 1.0) + 1.0) % 1.0;
     const center = this.spline.getPointAt(normalizedT);

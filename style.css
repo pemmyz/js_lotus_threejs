@@ -62,6 +62,24 @@ body.mobile-mode {
   box-shadow: 0 0 18px #00ffff;
 }
 
+/* --- ARCADE FPS COUNTER --- */
+#fps-counter {
+  position: fixed;
+  top: 8px;
+  left: clamp(165px, 25vw, 240px);
+  z-index: 9999;
+  background: rgba(10, 14, 26, 0.88);
+  border: 1px solid #00ff66;
+  border-radius: 4px;
+  color: #00ff66;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(8px, 1.6vmin, 10px);
+  padding: clamp(5px, 1.2vmin, 7px) clamp(8px, 1.8vmin, 12px);
+  letter-spacing: 1px;
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.35);
+  pointer-events: none;
+}
+
 /* --- DEV DROPDOWN MENU (TOP-RIGHT CORNER) --- */
 #dev-menu-container {
   position: fixed;
@@ -177,7 +195,7 @@ body.mobile-mode {
   box-shadow: 0 0 16px #ffe600;
 }
 
-/* --- GAME CONTAINER & FULL VIEWPORT RESIZING (NO LETTERBOX) --- */
+/* --- GAME CONTAINER & FULL VIEWPORT RESIZING --- */
 #game-container {
   position: absolute;
   top: 0;
@@ -298,14 +316,14 @@ body.split-screen #hud-p2 {
   left: 10px;
 }
 
-/* Top-Right HUD (FUEL, TURBO, SPEED) */
+/* Top-Right HUD (ARMOR, FUEL, TURBO, SPEED) */
 .hud-top-right {
   position: absolute;
   top: clamp(36px, 8.5vmin, 48px);
   right: clamp(10px, 2vmin, 18px);
   display: flex;
   align-items: center;
-  gap: clamp(6px, 1.5vmin, 14px);
+  gap: clamp(6px, 1.3vmin, 12px);
   z-index: 26;
 }
 
@@ -366,7 +384,7 @@ body.split-screen #hud-p2 {
 }
 
 .hud-bar-frame {
-  width: clamp(55px, 13vmin, 90px);
+  width: clamp(48px, 11vmin, 76px);
   height: clamp(7px, 1.6vmin, 10px);
   background: #111;
   border: 1px solid #445;
@@ -378,6 +396,21 @@ body.split-screen #hud-p2 {
   height: 100%;
   width: 100%;
   transition: width 0.15s ease-out;
+}
+
+/* Health / Armor fill */
+.health-fill {
+  background: linear-gradient(90deg, #ff0044, #ffe600, #00ff66);
+  box-shadow: 0 0 6px #00ff66;
+}
+
+.health-fill.low-health {
+  animation: health-blink 0.3s infinite alternate;
+}
+
+@keyframes health-blink {
+  from { opacity: 1; background: #ff0000; box-shadow: 0 0 10px #ff0000; }
+  to { opacity: 0.25; }
 }
 
 .fuel-fill {
@@ -420,25 +453,46 @@ body.split-screen #hud-p2 {
   color: #aaa;
 }
 
+/* Pitstop Center Prompts */
 .hud-center-msg {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(255, 0, 60, 0.9);
-  padding: 8px 20px;
-  border: 2px solid #fff;
+  background: rgba(255, 170, 0, 0.92);
+  color: #000;
+  padding: 10px 24px;
+  border: 3px solid #fff;
+  border-radius: 4px;
   font-family: 'Press Start 2P', monospace;
-  font-size: 16px;
+  font-size: clamp(13px, 3.2vmin, 18px);
+  letter-spacing: 1px;
+  box-shadow: 0 0 20px rgba(255, 170, 0, 0.85);
   animation: pulse-msg 0.5s infinite alternate;
+  z-index: 30;
+  text-align: center;
+}
+
+.hud-center-msg.pit-servicing {
+  background: rgba(0, 160, 255, 0.95);
+  color: #fff;
+  border-color: #00ffff;
+  box-shadow: 0 0 22px rgba(0, 255, 255, 0.9);
+}
+
+.hud-center-msg.pit-complete {
+  background: rgba(0, 220, 90, 0.95);
+  color: #000;
+  border-color: #ffffff;
+  box-shadow: 0 0 24px rgba(0, 255, 100, 0.9);
 }
 
 @keyframes pulse-msg {
-  from { transform: translate(-50%, -50%) scale(0.95); }
-  to   { transform: translate(-50%, -50%) scale(1.05); }
+  from { transform: translate(-50%, -50%) scale(0.96); }
+  to   { transform: translate(-50%, -50%) scale(1.04); }
 }
 
-/* --- MINIMAP (2X LARGER ACROSS DESKTOP AND MOBILE) --- */
+/* --- MINIMAP --- */
 #minimap-container {
   position: absolute;
   bottom: 20px;
@@ -576,12 +630,12 @@ body.mobile-mode #minimap-container {
   color: #ffcc00;
 }
 
-/* Main Menu AI Configuration Row */
+/* Main Menu Configuration Rows */
 .menu-config-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: clamp(10px, 2.4vmin, 12px);
   background: rgba(18, 26, 44, 0.7);
   padding: 6px 12px;
@@ -681,7 +735,7 @@ body.mobile-mode #minimap-container {
 .results-row.p1-row { color: #ff5555; font-weight: bold; background: rgba(255, 0, 0, 0.1); }
 .results-row.p2-row { color: #00bfff; font-weight: bold; background: rgba(0, 150, 255, 0.1); }
 
-/* --- MOBILE TOUCH CONTROLS (2X LARGER ACROSS ALL SCREENS) --- */
+/* --- MOBILE TOUCH CONTROLS --- */
 #mobile-controls {
   position: fixed;
   top: 0;
