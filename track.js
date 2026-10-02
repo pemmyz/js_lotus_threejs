@@ -1,9 +1,8 @@
 /* ===================================================
    AMIGA TURBO RACER - PROCEDURAL TRACK GENERATOR
    Creates dynamic 3D ribbon road geometry, Catmull-Rom
-   spline elevation, roadside signs, scenery (trees,
-   saguaro cacti, snowy pines, tropical palm trees, boulders,
-   logs, oil slicks), pit lane and pitstop service bay.
+   spline elevation, roadside signs, scenery, banked corners,
+   oval superspeedways, pit lane and pitstop service bay.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -25,6 +24,70 @@ class TrackGenerator {
 
   generate(seed = 849271, difficulty = 'MEDIUM', envType = 'FOREST', numWaypoints = 72, mapLayout = 'ORIGINAL', counterClockwise = false) {
     const random = this.createPRNG(seed);
+    const controlPoints = [];
+
+    // =========================================================
+    // 1. PURE NASCAR SUPERSPEEDWAY OVAL GENERATOR
+    // Two long straights and two tight circular ends.
+    // Turns strictly LEFT all the way around with zero kinks.
+    // =========================================================
+    if (mapLayout === 'OVAL') {
+      const straightLen = 720;
+      const turnRadius = 220;
+      const semiCircumference = Math.PI * turnRadius;
+      const totalPerimeter = 2 * straightLen + 2 * semiCircumference;
+
+      // Sample stadium curve points parametrically
+      const ovalWaypoints = 80;
+      for (let i = 0; i < ovalWaypoints; i++) {
+        const s = (i / ovalWaypoints) * totalPerimeter;
+        let x = 0;
+        let z = 0;
+
+        if (s < straightLen) {
+          // Frontstretch (Straight): moving along -Z
+          const frac = s / straightLen;
+          x = turnRadius;
+          z = (straightLen / 2) - frac * straightLen;
+        } else if (s < straightLen + semiCircumference) {
+          // Turn 1 & Turn 2 (North End): left turn semicircle
+          const arcS = s - straightLen;
+          const phi = arcS / turnRadius; // 0 -> PI
+          x = turnRadius * Math.cos(phi);
+          z = -straightLen / 2 - turnRadius * Math.sin(phi);
+        } else if (s < 2 * straightLen + semiCircumference) {
+          // Backstretch (Straight): moving along +Z
+          const frac = (s - (straightLen + semiCircumference)) / straightLen;
+          x = -turnRadius;
+          z = -straightLen / 2 + frac * straightLen;
+        } else {
+          // Turn 3 & Turn 4 (South End): left turn semicircle
+          const arcS = s - (2 * straightLen + semiCircumference);
+          const phi = Math.PI + (arcS / turnRadius); // PI -> 2*PI
+          x = turnRadius * Math.cos(phi);
+          z = straightLen / 2 - turnRadius * Math.sin(phi);
+        }
+
+        // Raised baseline (+9.5m) so banking never clips into terrain plane (y = -0.5)
+        controlPoints.push(new THREE.Vector3(x, 9.5, z));
+      }
+
+      const spline = new THREE.CatmullRomCurve3(controlPoints, true, 'centripetal');
+
+      return {
+        controlPoints,
+        spline,
+        totalLength: spline.getLength(),
+        seed,
+        envType,
+        mapLayout,
+        counterClockwise: false
+      };
+    }
+
+    // =========================================================
+    // 2. STANDARD PROCEDURAL ROAD CIRCUITS
+    // =========================================================
     const rawRadii = new Float32Array(numWaypoints);
     const elevations = new Float32Array(numWaypoints);
 
@@ -42,7 +105,6 @@ class TrackGenerator {
       hillScale = 6.5;
     }
 
-    // 1. Generate unique macro-shapes per layout (Original layouts untouched)
     for (let i = 0; i < numWaypoints; i++) {
       let angle = (i / numWaypoints) * Math.PI * 2;
       if (counterClockwise) {
@@ -52,8 +114,6 @@ class TrackGenerator {
       let r = 290;
 
       if (mapLayout === 'TROPICAL') {
-        // Lotus Esprit Turbo Challenge Pacific / Tropical Atoll circuit:
-        // Sweeping island ocean bends and wide tropical turns
         const rx = 245 + random() * 20;
         const rz = 365 + random() * 25;
         const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
@@ -96,26 +156,21 @@ class TrackGenerator {
         r = superR + Math.sin(angle * 4 + p2) * 32 + Math.cos(angle * 7) * 14;
 
       } else {
-        // ORIGINAL: Classic Grand Prix circuit
         const rx = 240 + random() * 30;
         const rz = 370 + random() * 35;
         const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
         r = base + Math.sin(angle * 2 + p1) * 38 + Math.cos(angle * 3 + p2) * 24;
       }
 
-      // Straightaway dampener around start/finish straight
       const distFromStart = Math.min(angle, Math.PI * 2 - angle);
       const straightBlend = Math.min(1.0, distFromStart / 0.32);
       const neutralRadius = 310;
       r = neutralRadius * (1.0 - straightBlend) + r * straightBlend;
 
       rawRadii[i] = Math.max(185, Math.min(415, r));
-
-      let y = (Math.sin(angle * 3) * hillScale + Math.cos(angle * 5) * (hillScale * 0.45)) * straightBlend;
-      elevations[i] = Math.max(0, y);
+      elevations[i] = Math.max(0, (Math.sin(angle * 3) * hillScale + Math.cos(angle * 5) * (hillScale * 0.45)) * straightBlend);
     }
 
-    // 2. Slope Limiter & Smooth Relax Pass
     const maxDelta = 14.5;
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 0; i < numWaypoints; i++) {
@@ -134,8 +189,6 @@ class TrackGenerator {
       finalRadii[i] = rawRadii[prev] * 0.22 + rawRadii[i] * 0.56 + rawRadii[next] * 0.22;
     }
 
-    // 3. Assemble Control Points
-    const controlPoints = [];
     for (let i = 0; i < numWaypoints; i++) {
       let angle = (i / numWaypoints) * Math.PI * 2;
       if (counterClockwise) {
@@ -169,7 +222,15 @@ class Track {
     this.spline = trackData.spline;
     this.totalLength = trackData.totalLength;
     this.envType = trackData.envType;
-    this.roadWidth = 14;
+
+    // Wider track on oval superspeedway for 4-wide pack racing
+    if (this.data.mapLayout === 'OVAL') {
+      this.roadWidth = 24.0;
+      this.shoulderWidth = 3.5;
+    } else {
+      this.roadWidth = 14.0;
+      this.shoulderWidth = 2.4;
+    }
 
     this.checkpoints = [];
     this.roadMesh = null;
@@ -182,7 +243,9 @@ class Track {
     this.buildRoadMesh();
     this.buildFinishLine();
     this.buildPitLane();
-    this.buildCenterMountain();
+    if (this.data.mapLayout !== 'OVAL') {
+      this.buildCenterMountain();
+    }
     this.buildRoadsideScenery();
     this.buildObstacles();
 
@@ -201,9 +264,9 @@ class Track {
 
     switch (this.data.envType) {
       case 'TROPICAL':
-        this.theme.skyColor = 0x22a6b3; // Bright tropical turquoise sky
+        this.theme.skyColor = 0x22a6b3;
         this.theme.fogColor = 0x7ed6df;
-        this.theme.groundColor = 0x27ae60; // Vibrant island grass
+        this.theme.groundColor = 0x27ae60;
         this.theme.treeLeaves = [0x2ecc71, 0x1abc9c, 0x10ac84];
         this.theme.fogNear = 140;
         this.theme.fogFar = 860;
@@ -235,27 +298,32 @@ class Track {
         break;
     }
 
+    if (this.data.mapLayout === 'OVAL') {
+      this.theme.fogNear = 280;
+      this.theme.fogFar = 1600;
+    }
+
     this.scene.background = new THREE.Color(this.theme.skyColor);
     this.scene.fog = new THREE.Fog(this.theme.fogColor, this.theme.fogNear, this.theme.fogFar);
   }
 
   buildRoadMesh() {
-    const samples = 1200;
+    const samples = 1400;
     const roadHalfWidth = this.roadWidth * 0.5;
-    const shoulderWidth = 2.4;
+    const shoulderWidth = this.shoulderWidth;
 
     const roadPositions = [];
     const roadUvs = [];
     const shoulderPositions = [];
     const shoulderColors = [];
 
-    const up = new THREE.Vector3(0, 1, 0);
-
     for (let i = 0; i <= samples; i++) {
       const t = i / samples;
-      const point = this.spline.getPointAt(t);
-      const tangent = this.spline.getTangentAt(t).normalize();
-      const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+      const roadInfo = this.getRoadTransformAt(t);
+      const point = roadInfo.center;
+      const normal = roadInfo.normal;
+      const tangent = roadInfo.tangent;
+      const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
       if (i % 50 === 0) {
         this.checkpoints.push({
@@ -265,23 +333,23 @@ class Track {
         });
       }
 
-      const leftEdge = point.clone().addScaledVector(normal, -roadHalfWidth);
-      const rightEdge = point.clone().addScaledVector(normal, roadHalfWidth);
+      const leftEdge = point.clone().addScaledVector(normal, -roadHalfWidth).addScaledVector(roadUp, 0.08);
+      const rightEdge = point.clone().addScaledVector(normal, roadHalfWidth).addScaledVector(roadUp, 0.08);
 
-      roadPositions.push(leftEdge.x, leftEdge.y + 0.08, leftEdge.z);
-      roadPositions.push(rightEdge.x, rightEdge.y + 0.08, rightEdge.z);
+      roadPositions.push(leftEdge.x, leftEdge.y, leftEdge.z);
+      roadPositions.push(rightEdge.x, rightEdge.y, rightEdge.z);
 
       roadUvs.push(0, i * 0.5);
       roadUvs.push(1, i * 0.5);
 
-      const shoulderLeftOuter = point.clone().addScaledVector(normal, -(roadHalfWidth + shoulderWidth));
-      const shoulderRightOuter = point.clone().addScaledVector(normal, (roadHalfWidth + shoulderWidth));
+      const shoulderLeftOuter = point.clone().addScaledVector(normal, -(roadHalfWidth + shoulderWidth)).addScaledVector(roadUp, 0.06);
+      const shoulderRightOuter = point.clone().addScaledVector(normal, (roadHalfWidth + shoulderWidth)).addScaledVector(roadUp, 0.06);
 
-      shoulderPositions.push(shoulderLeftOuter.x, shoulderLeftOuter.y + 0.06, shoulderLeftOuter.z);
-      shoulderPositions.push(leftEdge.x, leftEdge.y + 0.06, leftEdge.z);
+      shoulderPositions.push(shoulderLeftOuter.x, shoulderLeftOuter.y, shoulderLeftOuter.z);
+      shoulderPositions.push(leftEdge.x, leftEdge.y, leftEdge.z);
 
-      shoulderPositions.push(rightEdge.x, rightEdge.y + 0.06, rightEdge.z);
-      shoulderPositions.push(shoulderRightOuter.x, shoulderRightOuter.y + 0.06, shoulderRightOuter.z);
+      shoulderPositions.push(rightEdge.x, rightEdge.y, rightEdge.z);
+      shoulderPositions.push(shoulderRightOuter.x, shoulderRightOuter.y, shoulderRightOuter.z);
 
       const isRed = (Math.floor(i / 2) % 2 === 0);
       const r = isRed ? 0.95 : 0.95;
@@ -318,7 +386,7 @@ class Track {
     const roadTex = this.createRoadTexture();
     roadTex.wrapS = THREE.RepeatWrapping;
     roadTex.wrapT = THREE.RepeatWrapping;
-    roadTex.repeat.set(1, 40);
+    roadTex.repeat.set(1, 45);
 
     const roadMat = new THREE.MeshStandardMaterial({
       map: roadTex,
@@ -369,7 +437,8 @@ class Track {
   }
 
   buildTerrainPlane() {
-    const geo = new THREE.PlaneGeometry(3500, 3500, 48, 48);
+    const size = this.data.mapLayout === 'OVAL' ? 4800 : 3500;
+    const geo = new THREE.PlaneGeometry(size, size, 48, 48);
     geo.rotateX(-Math.PI / 2);
 
     const mat = new THREE.MeshStandardMaterial({
@@ -415,16 +484,18 @@ class Track {
 
   buildFinishLine() {
     const bannerGroup = new THREE.Group();
-    const startPoint = this.spline.getPointAt(0.01);
-    const tangent = this.spline.getTangentAt(0.01).normalize();
-    const up = new THREE.Vector3(0, 1, 0);
-    const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+    const startInfo = this.getRoadTransformAt(0.01);
+    const startPoint = startInfo.center;
+    const tangent = startInfo.tangent;
+    const normal = startInfo.normal;
+    const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
+    const postOffset = (this.roadWidth * 0.5) + 2.5;
     const pillarMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
     const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 8, 0.8), pillarMat);
     const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 8, 0.8), pillarMat);
-    p1.position.copy(startPoint).addScaledVector(normal, -9.5).setY(4);
-    p2.position.copy(startPoint).addScaledVector(normal, 9.5).setY(4);
+    p1.position.copy(startPoint).addScaledVector(normal, -postOffset).addScaledVector(roadUp, 4);
+    p2.position.copy(startPoint).addScaledVector(normal, postOffset).addScaledVector(roadUp, 4);
 
     const bannerCanvas = document.createElement('canvas');
     bannerCanvas.width = 256;
@@ -439,83 +510,86 @@ class Track {
 
     const bannerTex = new THREE.CanvasTexture(bannerCanvas);
     const bannerMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(19, 2.5, 0.5),
+      new THREE.BoxGeometry(this.roadWidth + 5.0, 2.5, 0.5),
       new THREE.MeshBasicMaterial({ map: bannerTex })
     );
-    bannerMesh.position.copy(startPoint).setY(7.5);
+    bannerMesh.position.copy(startPoint).addScaledVector(roadUp, 7.5);
     bannerMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
 
     bannerGroup.add(p1, p2, bannerMesh);
     this.sceneryGroup.add(bannerGroup);
   }
 
-  // Pitstop Service Bay & Traffic Sign positioned right after finish line
   buildPitLane() {
     const pitGroup = new THREE.Group();
-    const up = new THREE.Vector3(0, 1, 0);
+    const isOval = (this.data.mapLayout === 'OVAL');
 
-    // 1. Retro Pitstop Entry Traffic Sign (Lotus / Amiga arcade style) at t = 0.026
+    // 1. Pitstop Entry Traffic Sign at t = 0.026
     const signT = 0.026;
-    const signPoint = this.spline.getPointAt(signT);
-    const signTangent = this.spline.getTangentAt(signT).normalize();
-    const signNormal = new THREE.Vector3().crossVectors(signTangent, up).normalize();
+    const signInfo = this.getRoadTransformAt(signT);
+    const signOffset = (this.roadWidth * 0.5) + 2.5;
 
     const pitSignGroup = this.createPitTrafficSign();
-    pitSignGroup.position.copy(signPoint).addScaledVector(signNormal, 9.5);
-    pitSignGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), signTangent.clone().negate());
+    pitSignGroup.position.copy(signInfo.center).addScaledVector(signInfo.normal, signOffset);
+    pitSignGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), signInfo.tangent.clone().negate());
     pitGroup.add(pitSignGroup);
 
-    // 2. Main Pit Stop Zone (Around t = 0.052)
-    const pitPoint = this.spline.getPointAt(0.052);
-    const tangent = this.spline.getTangentAt(0.052).normalize();
-    const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+    // 2. Main Pit Stop Zone at t = 0.052
+    const pitInfo = this.getRoadTransformAt(0.052);
+    const pitPoint = pitInfo.center;
+    const tangent = pitInfo.tangent;
+    const normal = pitInfo.normal;
+    const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
-    // Pitstop roadside service shelter
+    const buildingOffset = (this.roadWidth * 0.5) + 7.5;
+    const canopyOffset = (this.roadWidth * 0.5) + 4.5;
+    const apronOffset = (this.roadWidth * 0.5) + 3.5;
+    const coneOffset = (this.roadWidth * 0.5) + 0.8;
+
+    // Pitstop roadside shelter positioned relative to road height
     const pitBuilding = new THREE.Mesh(
-      new THREE.BoxGeometry(6, 4.5, 24),
+      new THREE.BoxGeometry(6, 4.5, 28),
       new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 })
     );
-    pitBuilding.position.copy(pitPoint).addScaledVector(normal, 15).setY(2.25);
+    pitBuilding.position.copy(pitPoint).addScaledVector(normal, buildingOffset).addScaledVector(roadUp, 2.25);
     pitBuilding.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
     pitGroup.add(pitBuilding);
 
-    // Pitstop Service Overhead Canopy
+    // Pitstop Overhead Canopy
     const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(8, 0.4, 25),
+      new THREE.BoxGeometry(8, 0.4, 29),
       new THREE.MeshStandardMaterial({ color: 0xffee00, roughness: 0.5 })
     );
-    roof.position.copy(pitPoint).addScaledVector(normal, 12).setY(4.5);
+    roof.position.copy(pitPoint).addScaledVector(normal, canopyOffset).addScaledVector(roadUp, 4.5);
     roof.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
     pitGroup.add(roof);
 
-    // Pit Bay Roadside Asphalt Apron with Yellow Hazard Stripes
+    // Pit Bay Roadside Asphalt Apron
     const apron = new THREE.Mesh(
-      new THREE.PlaneGeometry(8, 28),
+      new THREE.PlaneGeometry(8, 32),
       new THREE.MeshBasicMaterial({ color: 0x18181b, side: THREE.DoubleSide })
     );
-    apron.rotation.x = -Math.PI / 2;
-    apron.position.copy(pitPoint).addScaledVector(normal, 11).setY(0.07);
+    apron.position.copy(pitPoint).addScaledVector(normal, apronOffset).addScaledVector(roadUp, 0.07);
     apron.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
     apron.rotateX(-Math.PI / 2);
     pitGroup.add(apron);
 
     // Pit Bay Traffic Cones
-    for (let c = -2; c <= 2; c++) {
+    for (let c = -3; c <= 3; c++) {
       const cone = new THREE.Mesh(
         new THREE.ConeGeometry(0.35, 1.0, 6),
         new THREE.MeshBasicMaterial({ color: 0xff4400 })
       );
-      cone.position.copy(pitPoint).addScaledVector(normal, 7.8).addScaledVector(tangent, c * 5).setY(0.5);
+      cone.position.copy(pitPoint).addScaledVector(normal, coneOffset).addScaledVector(tangent, c * 5).addScaledVector(roadUp, 0.5);
       pitGroup.add(cone);
     }
 
     this.sceneryGroup.add(pitGroup);
 
-    // Set interactive pitstop trigger zone immediately following finish line
     this.pitZone = {
       tStart: 0.024,
       tEnd: 0.082,
-      center: pitPoint.clone().addScaledVector(normal, 8)
+      center: pitPoint.clone().addScaledVector(normal, apronOffset)
     };
   }
 
@@ -529,7 +603,6 @@ class Track {
     boardCanvas.height = 64;
     const ctx = boardCanvas.getContext('2d');
 
-    // Blue retro signboard with white border
     ctx.fillStyle = '#0066cc';
     ctx.fillRect(0, 0, 128, 64);
     ctx.strokeStyle = '#ffffff';
@@ -556,21 +629,24 @@ class Track {
   }
 
   buildRoadsideScenery() {
-    const numObjects = 180;
-    const up = new THREE.Vector3(0, 1, 0);
+    const isOval = (this.data.mapLayout === 'OVAL');
+    const numObjects = isOval ? 220 : 180;
 
     for (let i = 0; i < numObjects; i++) {
       const t = (i / numObjects + 0.02) % 1.0;
 
-      // Keep roadside scenery clear of the pit lane area (t ~ 0.02 to 0.09 on right side)
+      // Keep scenery away from the pit area on the right side
       const side = (i % 2 === 0) ? 1 : -1;
       if (side === 1 && t > 0.02 && t < 0.09) continue;
 
-      const point = this.spline.getPointAt(t);
-      const tangent = this.spline.getTangentAt(t).normalize();
-      const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+      const roadInfo = this.getRoadTransformAt(t);
+      const point = roadInfo.center;
+      const tangent = roadInfo.tangent;
+      const normal = roadInfo.normal;
+      const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
-      const distFromRoad = 11 + (i % 5) * 6;
+      const baseDist = (this.roadWidth * 0.5) + (isOval ? 8 : 4);
+      const distFromRoad = baseDist + (i % 5) * 6;
       const objPos = point.clone().addScaledVector(normal, side * distFromRoad);
 
       if (i % 3 === 0) {
@@ -584,23 +660,22 @@ class Track {
         } else {
           plant = this.createTreeMesh();
         }
-        plant.position.set(objPos.x, 0, objPos.z);
+        plant.position.set(objPos.x, objPos.y, objPos.z);
         this.sceneryGroup.add(plant);
       } else if (i % 3 === 1) {
         const isBigBoulder = (i % 6 === 1);
         const rock = this.createRockMesh(isBigBoulder);
-        rock.position.set(objPos.x, isBigBoulder ? 1.4 : 0.4, objPos.z);
+        rock.position.set(objPos.x, objPos.y + (isBigBoulder ? 1.4 : 0.4), objPos.z);
         this.sceneryGroup.add(rock);
       } else {
         const sign = this.createSignMesh(side > 0 ? 'RIGHT' : 'LEFT');
-        sign.position.copy(point).addScaledVector(normal, side * 8.8);
+        sign.position.copy(point).addScaledVector(normal, side * ((this.roadWidth * 0.5) + 2.0)).addScaledVector(roadUp, 0.2);
         sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
         this.sceneryGroup.add(sign);
       }
     }
   }
 
-  // Low-poly Palm Tree (Lotus Esprit Turbo Challenge Style)
   createPalmTreeMesh() {
     const group = new THREE.Group();
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4b26, roughness: 0.9, flatShading: true });
@@ -608,7 +683,6 @@ class Track {
     const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
     const nutMat = new THREE.MeshStandardMaterial({ color: 0x4e3019, roughness: 0.9, flatShading: true });
 
-    // Segmented curved trunk
     const segments = 5;
     let prevHeight = 0;
     const trunkLean = (Math.random() - 0.5) * 0.14;
@@ -627,7 +701,6 @@ class Track {
     const topX = (segments - 1) * trunkLean * 2.0;
     const topY = prevHeight + 0.2;
 
-    // Coconuts cluster beneath fronds
     for (let c = 0; c < 3; c++) {
       const angle = (c / 3) * Math.PI * 2;
       const nut = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24, 0), nutMat);
@@ -635,7 +708,6 @@ class Track {
       group.add(nut);
     }
 
-    // Arching fan palm fronds
     const numFronds = 7;
     for (let f = 0; f < numFronds; f++) {
       const frondAngle = (f / numFronds) * Math.PI * 2 + Math.random() * 0.2;
@@ -824,10 +896,14 @@ class Track {
   }
 
   buildObstacles() {
+    // Zero obstacles on oval superspeedway for clean flat-out drafting and pack racing
+    if (this.data.mapLayout === 'OVAL') {
+      return;
+    }
+
     const minLogSpacingMeters = this.roadWidth * 2.4;
     const minSpacingT = minLogSpacingMeters / this.totalLength;
 
-    // Start obstacle generation well after the pit area (t > 0.13)
     let currentT = 0.13;
     let patternCounter = 0;
 
@@ -856,13 +932,14 @@ class Track {
         const tInfo = this.getRoadTransformAt(currentT);
         const laneOffsetRatio = (Math.random() * 1.0 - 0.5);
         const oilPos = tInfo.center.clone().addScaledVector(tInfo.normal, laneOffsetRatio * (this.roadWidth * 0.4));
+        const roadUp = new THREE.Vector3().crossVectors(tInfo.normal, tInfo.tangent).normalize();
 
         const oilMesh = new THREE.Mesh(
           new THREE.CircleGeometry(2.0, 8),
           new THREE.MeshBasicMaterial({ color: 0x111115, opacity: 0.85, transparent: true, side: THREE.DoubleSide })
         );
         oilMesh.rotation.x = -Math.PI / 2;
-        oilMesh.position.copy(oilPos).setY(oilPos.y + 0.08);
+        oilMesh.position.copy(oilPos).addScaledVector(roadUp, 0.08);
 
         this.sceneryGroup.add(oilMesh);
         this.obstacles.push({
@@ -914,7 +991,33 @@ class Track {
     const up = new THREE.Vector3(0, 1, 0);
     const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-    return { center, tangent, normal, t: normalizedT };
+    // 2D Curvature computation (positive indicates turning left)
+    const dt = 0.005;
+    const tNext = (normalizedT + dt) % 1.0;
+    const tPrev = (normalizedT - dt + 1.0) % 1.0;
+    const tanNext = this.spline.getTangentAt(tNext);
+    const tanPrev = this.spline.getTangentAt(tPrev);
+    const turnCurvature = (tanNext.x * tanPrev.z - tanNext.z * tanPrev.x);
+
+    let bankAngle = 0;
+
+    if (this.data.mapLayout === 'OVAL') {
+      // Authentic NASCAR Banking:
+      // Straights are still banked at ~12° (0.21 rad).
+      // Both ends steepen progressively to ~34° (0.60 rad) in turns.
+      // Negative rotation around forward tangent tilts outside (+normal) UP.
+      const turnIntensity = Math.min(1.0, Math.max(0.0, turnCurvature * 240.0));
+      const ovalBank = 0.21 + turnIntensity * 0.39;
+      bankAngle = -ovalBank;
+    } else {
+      bankAngle = Math.max(-0.25, Math.min(0.25, -turnCurvature * 70.0));
+    }
+
+    if (Math.abs(bankAngle) > 0.005) {
+      normal.applyAxisAngle(tangent, bankAngle);
+    }
+
+    return { center, tangent, normal, bankAngle, t: normalizedT };
   }
 }
 

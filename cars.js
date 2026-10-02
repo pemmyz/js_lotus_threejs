@@ -234,7 +234,7 @@ class Car {
 
     // Car Health & Tires
     this.health = 100.0;
-    this.tires = 100.0; // 100% = brand new, 0% = completely bald
+    this.tires = 100.0;
     this.damageSmokeTimer = 0;
 
     // Collision cooldown timer
@@ -349,10 +349,11 @@ class Car {
     this.totalRaceDistance += distanceDelta;
     this.trackT = ((this.trackT + (distanceDelta / track.totalLength)) % 1.0 + 1.0) % 1.0;
 
-    // Road alignment
+    // Road alignment with full 3D corner banking tilt
     const roadInfo = track.getRoadTransformAt(this.trackT);
     const roadHalfWidth = track.roadWidth * 0.46;
     const worldPos = roadInfo.center.clone().addScaledVector(roadInfo.normal, this.laneOffset * roadHalfWidth);
+    const roadUp = new THREE.Vector3().crossVectors(roadInfo.normal, roadInfo.tangent).normalize();
 
     if (this.slipTime <= 0) {
       this.steerYaw = THREE.MathUtils.lerp(this.steerYaw || 0, this.steerAngle || 0, delta * 12);
@@ -365,13 +366,14 @@ class Car {
       const rearDir = roadInfo.tangent.clone().negate().addScaledVector(roadInfo.normal, swingOffset).normalize();
 
       this.mesh.position.copy(frontPoint).addScaledVector(rearDir, frontOffset);
-      this.mesh.position.y += this.altitude + 0.05;
+      this.mesh.position.addScaledVector(roadUp, this.altitude + 0.05);
 
       const lookTarget = this.mesh.position.clone().add(rearDir);
+      this.mesh.up.copy(roadUp);
       this.mesh.lookAt(lookTarget);
     } else {
       this.mesh.position.copy(worldPos);
-      this.mesh.position.y += this.altitude + 0.05;
+      this.mesh.position.addScaledVector(roadUp, this.altitude + 0.05);
     }
 
     this.updateLapCheckpoints(track);
@@ -412,7 +414,7 @@ class Car {
       }
     }
 
-    // Rear Wheel Skid Smoke (higher volume if tires are worn or drifting)
+    // Rear Wheel Skid Smoke
     const isTurning = Math.abs(this.steerYaw) > 0.08 || this.slipTime > 0;
     if (isTurning && this.speed > 8) {
       this.tireSmokeTimer += delta;
@@ -535,7 +537,6 @@ class Car {
   steer(amount, delta) {
     if (this.speed < 2) return;
     const slipFactor = this.slipTime > 0 ? 0.25 : 1.0;
-    // Grip drops off progressively below 50% tire condition
     const tireGrip = this.tires < 50 ? Math.max(0.42, 0.42 + (this.tires / 50) * 0.58) : 1.0;
     this.laneOffset += amount * this.steeringSensitivity * slipFactor * tireGrip * delta;
     this.laneOffset = Math.max(-1.3, Math.min(1.3, this.laneOffset));
@@ -607,17 +608,76 @@ class AIController {
   }
 
   update(delta, allCars) {
-    if (this.car.speed < this.desiredSpeed) {
-      this.car.accelerate(delta);
+    const car = this.car;
+    const track = this.track;
+
+    // --- AI PITSTOP DECISION & SERVICING ---
+    const needsService = (car.health < 65 || car.tires < 40 || car.fuel < 40);
+    let inPitZone = false;
+    let inServiceBay = false;
+
+    if (track && track.pitZone) {
+      let dt = car.trackT - track.pitZone.tStart;
+      if (dt < -0.5) dt += 1.0;
+      if (dt > 0.5) dt -= 1.0;
+      const zoneLen = track.pitZone.tEnd - track.pitZone.tStart;
+      inPitZone = (dt >= -0.01 && dt <= zoneLen + 0.01);
+
+      const distToBay = car.mesh.position.distanceTo(track.pitZone.center);
+      inServiceBay = distToBay < 14.0;
+    }
+
+    if (inPitZone && (needsService || inServiceBay)) {
+      // Steer toward roadside service bay
+      this.targetLane = 0.88;
+
+      if (inServiceBay) {
+        if (needsService) {
+          // Brake to full stop
+          car.brake(delta * 2.2);
+          car.speed = Math.max(0, car.speed - 90.0 * delta);
+
+          // Pit servicing repairs
+          car.fuel = Math.min(100, car.fuel + 45 * delta);
+          car.health = Math.min(100, car.health + 40 * delta);
+          car.tires = Math.min(100, car.tires + 50 * delta);
+
+          if (window.ATR.Audio && Math.random() < 0.15) {
+            window.ATR.Audio.playRepair();
+          }
+        } else {
+          // Servicing complete, rejoin race
+          car.accelerate(delta);
+          this.targetLane = 0.1;
+        }
+      } else {
+        if (car.speed > 55) {
+          car.brake(delta);
+        } else {
+          car.accelerate(delta * 0.4);
+        }
+      }
+
+      const diff = this.targetLane - car.laneOffset;
+      if (Math.abs(diff) > 0.04) {
+        car.steer(Math.sign(diff) * 1.5, delta);
+      }
+      car.updatePhysics(delta, this.track);
+      return;
+    }
+
+    // --- STANDARD RACING BEHAVIOR ---
+    if (car.speed < this.desiredSpeed) {
+      car.accelerate(delta);
     } else {
-      this.car.speed *= 0.995;
+      car.speed *= 0.995;
     }
 
     // Predictive Obstacle Avoidance
     let isAvoidingObstacle = false;
     if (this.track && this.track.obstacles) {
       for (let obs of this.track.obstacles) {
-        let dt = obs.t - this.car.trackT;
+        let dt = obs.t - car.trackT;
         if (dt < -0.5) dt += 1.0;
         if (dt > 0.5) dt -= 1.0;
         const distAhead = dt * this.track.totalLength;
@@ -634,10 +694,10 @@ class AIController {
             this.targetLane = oilSide > 0 ? -0.65 : 0.65;
           }
 
-          const inHazardPath = (obs.side === -1 && this.car.laneOffset < 0.15) ||
-                               (obs.side === 1 && this.car.laneOffset > -0.15);
+          const inHazardPath = (obs.side === -1 && car.laneOffset < 0.15) ||
+                               (obs.side === 1 && car.laneOffset > -0.15);
           if (distAhead < 22.0 && inHazardPath) {
-            this.car.speed = Math.max(0, this.car.speed - 40.0 * delta);
+            car.speed = Math.max(0, car.speed - 40.0 * delta);
           }
           break;
         }
@@ -647,22 +707,22 @@ class AIController {
     // Predictive Car-to-Car Avoidance
     if (!isAvoidingObstacle) {
       for (let other of allCars) {
-        if (other === this.car) continue;
+        if (other === car) continue;
 
-        let dt = other.trackT - this.car.trackT;
+        let dt = other.trackT - car.trackT;
         if (dt < -0.5) dt += 1.0;
         if (dt > 0.5) dt -= 1.0;
         const distAhead = dt * this.track.totalLength;
 
         if (distAhead > 0.5 && distAhead < 24.0) {
-          const laneDiff = other.laneOffset - this.car.laneOffset;
+          const laneDiff = other.laneOffset - car.laneOffset;
           if (Math.abs(laneDiff) < 0.45) {
             this.targetLane = other.laneOffset > 0
-              ? Math.max(-0.75, this.car.laneOffset - 0.55)
-              : Math.min(0.75, this.car.laneOffset + 0.55);
+              ? Math.max(-0.75, car.laneOffset - 0.55)
+              : Math.min(0.75, car.laneOffset + 0.55);
 
-            if (distAhead < 10.0 && this.car.speed > other.speed) {
-              this.car.speed = Math.max(0, this.car.speed - 30.0 * delta);
+            if (distAhead < 10.0 && car.speed > other.speed) {
+              car.speed = Math.max(0, car.speed - 30.0 * delta);
             }
           }
         }
@@ -678,13 +738,13 @@ class AIController {
       }
     }
 
-    const diff = this.targetLane - this.car.laneOffset;
+    const diff = this.targetLane - car.laneOffset;
     if (Math.abs(diff) > 0.05) {
       const steerForce = isAvoidingObstacle ? 1.6 : 0.85;
-      this.car.steer(Math.sign(diff) * steerForce, delta);
+      car.steer(Math.sign(diff) * steerForce, delta);
     }
 
-    this.car.updatePhysics(delta, this.track);
+    car.updatePhysics(delta, this.track);
   }
 }
 

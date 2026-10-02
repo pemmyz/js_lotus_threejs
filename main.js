@@ -323,6 +323,22 @@ class Game {
       window.ATR.devSettings.disableAiEnvCollisions = e.target.checked;
     });
 
+    // Dev: Damage all AI cars to test pitstop entry and repairs
+    const damageAiBtn = document.getElementById('dev-damage-ai');
+    if (damageAiBtn) {
+      bindTap(damageAiBtn, () => {
+        let count = 0;
+        this.aiCars.forEach(ctrl => {
+          ctrl.car.health = 18.0;
+          ctrl.car.tires = 15.0;
+          ctrl.car.fuel = 20.0;
+          count++;
+        });
+        flashButtonFeedback(damageAiBtn, `💥 ${count} AI DAMAGED!`);
+        if (window.ATR.Audio) window.ATR.Audio.playCrash();
+      });
+    }
+
     // Lap Selector Synchronization (Main Menu & Options)
     const menuLapsSelect = document.getElementById('menu-laps-select');
     const optLapsSelect = document.getElementById('opt-laps');
@@ -427,6 +443,7 @@ class Game {
         else if (this.mapLayout === 'ALPINE') this.envType = 'MOUNTAIN';
         else if (this.mapLayout === 'FJORD') this.envType = 'SNOW';
         else if (this.mapLayout === 'MIDNIGHT') this.envType = 'NIGHT';
+        else if (this.mapLayout === 'OVAL') this.envType = 'FOREST';
       }
     };
 
