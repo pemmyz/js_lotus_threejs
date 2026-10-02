@@ -37,8 +37,8 @@ class TrackGenerator {
       const semiCircumference = Math.PI * turnRadius;
       const totalPerimeter = 2 * straightLen + 2 * semiCircumference;
 
-      // Sample stadium curve points parametrically
-      const ovalWaypoints = 80;
+      // 120 waypoints for seamless spline continuity into and out of corners
+      const ovalWaypoints = 120;
       for (let i = 0; i < ovalWaypoints; i++) {
         const s = (i / ovalWaypoints) * totalPerimeter;
         let x = 0;
@@ -68,7 +68,7 @@ class TrackGenerator {
           z = straightLen / 2 - turnRadius * Math.sin(phi);
         }
 
-        // Raised baseline (+9.5m) so banking never clips into terrain plane (y = -0.5)
+        // Lifted baseline (+9.5m) so banking never clips into terrain plane (y = -0.5)
         controlPoints.push(new THREE.Vector3(x, 9.5, z));
       }
 
@@ -308,7 +308,7 @@ class Track {
   }
 
   buildRoadMesh() {
-    const samples = 1400;
+    const samples = (this.data.mapLayout === 'OVAL') ? 1600 : 1200;
     const roadHalfWidth = this.roadWidth * 0.5;
     const shoulderWidth = this.shoulderWidth;
 
@@ -522,7 +522,6 @@ class Track {
 
   buildPitLane() {
     const pitGroup = new THREE.Group();
-    const isOval = (this.data.mapLayout === 'OVAL');
 
     // 1. Pitstop Entry Traffic Sign at t = 0.026
     const signT = 0.026;
@@ -646,8 +645,17 @@ class Track {
       const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
       const baseDist = (this.roadWidth * 0.5) + (isOval ? 8 : 4);
-      const distFromRoad = baseDist + (i % 5) * 6;
+      let distFromRoad = baseDist + (i % 5) * 6;
+
+      // Oval Outer Bank: bring objects down directly to the track's outer shoulder edge
+      if (isOval && side === 1) {
+        distFromRoad = (this.roadWidth * 0.5) + this.shoulderWidth;
+      }
+
       const objPos = point.clone().addScaledVector(normal, side * distFromRoad);
+      if (isOval && side === 1) {
+        objPos.addScaledVector(roadUp, 0.06);
+      }
 
       if (i % 3 === 0) {
         let plant;
@@ -665,7 +673,10 @@ class Track {
       } else if (i % 3 === 1) {
         const isBigBoulder = (i % 6 === 1);
         const rock = this.createRockMesh(isBigBoulder);
-        rock.position.set(objPos.x, objPos.y + (isBigBoulder ? 1.4 : 0.4), objPos.z);
+        const rockY = (isOval && side === 1)
+          ? (objPos.y + (isBigBoulder ? 0.6 : 0.2))
+          : (objPos.y + (isBigBoulder ? 1.4 : 0.4));
+        rock.position.set(objPos.x, rockY, objPos.z);
         this.sceneryGroup.add(rock);
       } else {
         const sign = this.createSignMesh(side > 0 ? 'RIGHT' : 'LEFT');
@@ -991,26 +1002,27 @@ class Track {
     const up = new THREE.Vector3(0, 1, 0);
     const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-    // 2D Curvature computation (positive indicates turning left)
-    const dt = 0.005;
-    const tNext = (normalizedT + dt) % 1.0;
-    const tPrev = (normalizedT - dt + 1.0) % 1.0;
-    const tanNext = this.spline.getTangentAt(tNext);
-    const tanPrev = this.spline.getTangentAt(tPrev);
-    const turnCurvature = (tanNext.x * tanPrev.z - tanNext.z * tanPrev.x);
-
     let bankAngle = 0;
 
     if (this.data.mapLayout === 'OVAL') {
-      // Authentic NASCAR Banking:
-      // Straights are still banked at ~12° (0.21 rad).
-      // Both ends steepen progressively to ~34° (0.60 rad) in turns.
-      // Negative rotation around forward tangent tilts outside (+normal) UP.
-      const turnIntensity = Math.min(1.0, Math.max(0.0, turnCurvature * 240.0));
-      const ovalBank = 0.21 + turnIntensity * 0.39;
+      // Smooth NASCAR Banking Transition:
+      // Uses the unit tangent X deflection with a quintic smootherstep (zero 1st & 2nd derivatives at both ends).
+      // Rolls progressively across 170m+ between 12° (0.21 rad) on the straights and 34° (0.59 rad) in the turns.
+      // Eliminates steps, ridges, or physics jolts completely.
+      const turnDeflection = Math.abs(tangent.x);
+      const p = Math.min(1.0, Math.max(0.0, (turnDeflection - 0.04) / 0.66));
+      const w = p * p * p * (p * (p * 6 - 15) + 10); // Quintic smootherstep
+      const ovalBank = 0.21 + w * 0.38;
       bankAngle = -ovalBank;
     } else {
-      bankAngle = Math.max(-0.25, Math.min(0.25, -turnCurvature * 70.0));
+      // Continuous smooth sigmoid banking for road courses (eliminates clamp kinks)
+      const dt = 0.005;
+      const tNext = (normalizedT + dt) % 1.0;
+      const tPrev = (normalizedT - dt + 1.0) % 1.0;
+      const tanNext = this.spline.getTangentAt(tNext);
+      const tanPrev = this.spline.getTangentAt(tPrev);
+      const turnCurvature = (tanNext.x * tanPrev.z - tanNext.z * tanPrev.x);
+      bankAngle = -0.25 * Math.tanh(turnCurvature * 80.0);
     }
 
     if (Math.abs(bankAngle) > 0.005) {
