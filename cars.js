@@ -283,9 +283,12 @@ class Car {
       this.mesh.rotation.y += delta * 15.0;
     }
 
-    this.offRoad = Math.abs(this.laneOffset) > 0.88;
+    // Only slow down on oval tracks when tires actually touch the red/white edges
+    const isOval = track?.data?.mapLayout === 'OVAL';
+    const edgeThreshold = isOval ? 0.98 : 0.88;
+    this.offRoad = Math.abs(this.laneOffset) > edgeThreshold;
     if (this.offRoad && !this.airborne) {
-      this.speed *= (1.0 - 1.6 * delta); // Grass drag
+      this.speed *= (1.0 - 1.6 * delta); // Edge/shoulder drag
     }
 
     this.speed *= Math.pow(this.drag, delta * 60);
