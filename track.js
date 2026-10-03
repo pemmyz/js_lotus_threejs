@@ -692,20 +692,40 @@ class Track {
         } else {
           plant = this.createTreeMesh();
         }
-        plant.position.set(objPos.x, objPos.y, objPos.z);
+
+        // Ground level (y = 0) on regular circuits, track level on oval
+        const plantY = isOval ? objPos.y : 0;
+        plant.position.set(objPos.x, plantY, objPos.z);
         this.sceneryGroup.add(plant);
+
       } else if (i % 3 === 1) {
         const isBigBoulder = (i % 6 === 1);
         const rock = this.createRockMesh(isBigBoulder);
-        const rockY = (isOval && side === 1)
-          ? (objPos.y + (isBigBoulder ? 0.6 : 0.2))
-          : (objPos.y + (isBigBoulder ? 1.4 : 0.4));
+
+        // Ground level on regular circuits, track level on oval
+        const rockY = isOval
+          ? (side === 1 ? objPos.y + (isBigBoulder ? 0.6 : 0.2) : objPos.y + (isBigBoulder ? 1.4 : 0.4))
+          : (isBigBoulder ? 1.2 : 0.4);
+
         rock.position.set(objPos.x, rockY, objPos.z);
         this.sceneryGroup.add(rock);
+
       } else {
         const sign = this.createSignMesh(side > 0 ? 'RIGHT' : 'LEFT');
-        sign.position.copy(point).addScaledVector(normal, side * ((this.roadWidth * 0.5) + 2.0)).addScaledVector(roadUp, 0.2);
-        sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
+
+        if (isOval) {
+          // Untouched track-level placement on oval
+          sign.position.copy(point).addScaledVector(normal, side * ((this.roadWidth * 0.5) + 2.0)).addScaledVector(roadUp, 0.2);
+          sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
+        } else {
+          // Ground level (y = 0) placement on all other maps
+          const signPos = point.clone().addScaledVector(normal, side * ((this.roadWidth * 0.5) + 2.0));
+          signPos.y = 0;
+          sign.position.copy(signPos);
+          const forward = new THREE.Vector3(-tangent.x, 0, -tangent.z).normalize();
+          sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), forward);
+        }
+
         this.sceneryGroup.add(sign);
       }
     }
