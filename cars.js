@@ -261,6 +261,62 @@ class Car {
     this.scene.add(this.mesh);
   }
 
+  static getEligibleSmokeCars(track) {
+    if (Car._eligibleSmokeSet && (performance.now() - (Car._smokeCacheTime || 0) < 50)) {
+      return Car._eligibleSmokeSet;
+    }
+
+    const game = window.gameApp;
+    if (!game || !game.allCars || game.allCars.length === 0) return null;
+
+    const eligibleSet = new Set();
+    const activeTrack = track || game.track;
+    const trackLen = activeTrack?.totalLength || 1000;
+
+    const players = [];
+    if (game.player1) players.push(game.player1);
+    if (game.player2) players.push(game.player2);
+
+    for (let p = 0; p < players.length; p++) {
+      const player = players[p];
+      const candidates = [];
+
+      for (let i = 0; i < game.allCars.length; i++) {
+        const car = game.allCars[i];
+        if (car.isPlayer || car === player) continue;
+
+        let dt = car.trackT - player.trackT;
+        if (dt < -0.5) dt += 1.0;
+        if (dt > 0.5) dt -= 1.0;
+
+        const distAhead = dt * trackLen;
+        // Check only cars that are actually in front of the player along the track
+        if (distAhead > 0 && distAhead < 140) {
+          const distSq = car.mesh.position.distanceToSquared(player.mesh.position);
+          candidates.push({ car, distSq });
+        }
+      }
+
+      // Pick up to the 5 closest cars in front of the player
+      candidates.sort((a, b) => a.distSq - b.distSq);
+      const limit = Math.min(candidates.length, 5);
+      for (let i = 0; i < limit; i++) {
+        eligibleSet.add(candidates[i].car);
+      }
+    }
+
+    Car._smokeCacheTime = performance.now();
+    Car._eligibleSmokeSet = eligibleSet;
+
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(() => { Car._eligibleSmokeSet = null; });
+    } else {
+      Promise.resolve().then(() => { Car._eligibleSmokeSet = null; });
+    }
+
+    return eligibleSet;
+  }
+
   updatePhysics(delta, track) {
     if (this.hazardCooldown > 0) {
       this.hazardCooldown -= delta;
@@ -380,15 +436,16 @@ class Car {
     }
 
     this.updateLapCheckpoints(track);
-    this.updateSmoke(delta, roadInfo);
+    this.updateSmoke(delta, roadInfo, track);
   }
 
-  updateSmoke(delta, roadInfo) {
+  updateSmoke(delta, roadInfo, track) {
     if (!window.ATR.smokeSystem) return;
 
-    if (!this.isPlayer && window.gameApp && window.gameApp.player1) {
-      const distSq = this.mesh.position.distanceToSquared(window.gameApp.player1.mesh.position);
-      if (distSq > 140 * 140) return;
+    // Only show smoke effects from the 5 closest cars in front of the player
+    if (!this.isPlayer) {
+      const eligible = Car.getEligibleSmokeCars(track);
+      if (!eligible || !eligible.has(this)) return;
     }
 
     this.mesh.updateMatrixWorld(true);
