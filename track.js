@@ -2,7 +2,7 @@
    AMIGA TURBO RACER - PROCEDURAL TRACK GENERATOR
    Creates dynamic 3D ribbon road geometry, Catmull-Rom
    spline elevation, roadside signs, scenery, banked corners,
-   oval superspeedways, pit lane and pitstop service bay.
+   oval superspeedways, pit lane and procedural clouds.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -28,8 +28,6 @@ class TrackGenerator {
 
     // =========================================================
     // 1. PURE NASCAR SUPERSPEEDWAY OVAL GENERATOR
-    // Two long straights and two tight circular ends.
-    // Turns strictly LEFT all the way around with zero kinks.
     // =========================================================
     if (mapLayout === 'OVAL') {
       const straightLen = 720;
@@ -37,7 +35,6 @@ class TrackGenerator {
       const semiCircumference = Math.PI * turnRadius;
       const totalPerimeter = 2 * straightLen + 2 * semiCircumference;
 
-      // 120 waypoints for seamless spline continuity into and out of corners
       const ovalWaypoints = 120;
       for (let i = 0; i < ovalWaypoints; i++) {
         const s = (i / ovalWaypoints) * totalPerimeter;
@@ -45,30 +42,25 @@ class TrackGenerator {
         let z = 0;
 
         if (s < straightLen) {
-          // Frontstretch (Straight): moving along -Z
           const frac = s / straightLen;
           x = turnRadius;
           z = (straightLen / 2) - frac * straightLen;
         } else if (s < straightLen + semiCircumference) {
-          // Turn 1 & Turn 2 (North End): left turn semicircle
           const arcS = s - straightLen;
-          const phi = arcS / turnRadius; // 0 -> PI
+          const phi = arcS / turnRadius;
           x = turnRadius * Math.cos(phi);
           z = -straightLen / 2 - turnRadius * Math.sin(phi);
         } else if (s < 2 * straightLen + semiCircumference) {
-          // Backstretch (Straight): moving along +Z
           const frac = (s - (straightLen + semiCircumference)) / straightLen;
           x = -turnRadius;
           z = -straightLen / 2 + frac * straightLen;
         } else {
-          // Turn 3 & Turn 4 (South End): left turn semicircle
           const arcS = s - (2 * straightLen + semiCircumference);
-          const phi = Math.PI + (arcS / turnRadius); // PI -> 2*PI
+          const phi = Math.PI + (arcS / turnRadius);
           x = turnRadius * Math.cos(phi);
           z = straightLen / 2 - turnRadius * Math.sin(phi);
         }
 
-        // Lifted baseline (+9.5m) so banking never clips into terrain plane (y = -0.5)
         controlPoints.push(new THREE.Vector3(x, 9.5, z));
       }
 
@@ -223,7 +215,6 @@ class Track {
     this.totalLength = trackData.totalLength;
     this.envType = trackData.envType;
 
-    // Wider track on oval superspeedway for 4-wide pack racing
     if (this.data.mapLayout === 'OVAL') {
       this.roadWidth = 24.0;
       this.shoulderWidth = 3.5;
@@ -248,6 +239,48 @@ class Track {
     }
     this.buildRoadsideScenery();
     this.buildObstacles();
+
+    // ----------------------------------------------------
+    // PROCEDURAL CLOUD SYSTEM INSTANTIATION
+    // ----------------------------------------------------
+    const isOval = this.data.mapLayout === 'OVAL';
+    let cloudColor = 0xffffff;
+    let cloudOpacity = 0.45;
+
+    if (this.data.envType === 'DESERT') {
+      cloudColor = 0xffe9d2;
+      cloudOpacity = 0.42;
+    } else if (this.data.envType === 'NIGHT') {
+      cloudColor = 0x4d5577;
+      cloudOpacity = 0.32;
+    } else if (this.data.envType === 'MOUNTAIN') {
+      cloudColor = 0xedf2f7;
+      cloudOpacity = 0.48;
+    }
+
+    const cloudFactory = window.ATR.createCloudSystem;
+    if (typeof cloudFactory === 'function') {
+      this.clouds = cloudFactory({
+        count: isOval ? 48 : 36,
+        baseAlt: 175,
+        minRadius: 50,
+        maxRadius: isOval ? 1150 : 690,
+        boundX: isOval ? 1300 : 850,
+        cloudColor: cloudColor,
+        opacity: cloudOpacity,
+        getHeightAt: (x, z) => {
+          // Keep clouds floating cleanly above the center mountain
+          if (this.data.mapLayout === 'OVAL') return 10;
+          const dist = Math.hypot(x, z);
+          if (dist < 105) {
+            return (1.0 - dist / 105) * 115;
+          }
+          return 0;
+        }
+      });
+
+      this.sceneryGroup.add(this.clouds.group);
+    }
 
     this.scene.add(this.sceneryGroup);
   }
@@ -523,7 +556,6 @@ class Track {
   buildPitLane() {
     const pitGroup = new THREE.Group();
 
-    // 1. Pitstop Entry Traffic Sign at t = 0.026
     const signT = 0.026;
     const signInfo = this.getRoadTransformAt(signT);
     const signOffset = (this.roadWidth * 0.5) + 2.5;
@@ -533,7 +565,6 @@ class Track {
     pitSignGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), signInfo.tangent.clone().negate());
     pitGroup.add(pitSignGroup);
 
-    // 2. Main Pit Stop Zone at t = 0.052
     const pitInfo = this.getRoadTransformAt(0.052);
     const pitPoint = pitInfo.center;
     const tangent = pitInfo.tangent;
@@ -545,7 +576,6 @@ class Track {
     const apronOffset = (this.roadWidth * 0.5) + 3.5;
     const coneOffset = (this.roadWidth * 0.5) + 0.8;
 
-    // Pitstop roadside shelter positioned relative to road height
     const pitBuilding = new THREE.Mesh(
       new THREE.BoxGeometry(6, 4.5, 28),
       new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 })
@@ -554,7 +584,6 @@ class Track {
     pitBuilding.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
     pitGroup.add(pitBuilding);
 
-    // Pitstop Overhead Canopy
     const roof = new THREE.Mesh(
       new THREE.BoxGeometry(8, 0.4, 29),
       new THREE.MeshStandardMaterial({ color: 0xffee00, roughness: 0.5 })
@@ -563,7 +592,6 @@ class Track {
     roof.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
     pitGroup.add(roof);
 
-    // Pit Bay Roadside Asphalt Apron
     const apron = new THREE.Mesh(
       new THREE.PlaneGeometry(8, 32),
       new THREE.MeshBasicMaterial({ color: 0x18181b, side: THREE.DoubleSide })
@@ -573,7 +601,6 @@ class Track {
     apron.rotateX(-Math.PI / 2);
     pitGroup.add(apron);
 
-    // Pit Bay Traffic Cones
     for (let c = -3; c <= 3; c++) {
       const cone = new THREE.Mesh(
         new THREE.ConeGeometry(0.35, 1.0, 6),
@@ -634,7 +661,6 @@ class Track {
     for (let i = 0; i < numObjects; i++) {
       const t = (i / numObjects + 0.02) % 1.0;
 
-      // Keep scenery away from the pit area on the right side
       const side = (i % 2 === 0) ? 1 : -1;
       if (side === 1 && t > 0.02 && t < 0.09) continue;
 
@@ -647,7 +673,6 @@ class Track {
       const baseDist = (this.roadWidth * 0.5) + (isOval ? 8 : 4);
       let distFromRoad = baseDist + (i % 5) * 6;
 
-      // Oval Outer Bank: bring objects down directly to the track's outer shoulder edge
       if (isOval && side === 1) {
         distFromRoad = (this.roadWidth * 0.5) + this.shoulderWidth;
       }
@@ -907,7 +932,6 @@ class Track {
   }
 
   buildObstacles() {
-    // Zero obstacles on oval superspeedway for clean flat-out drafting and pack racing
     if (this.data.mapLayout === 'OVAL') {
       return;
     }
@@ -1005,17 +1029,12 @@ class Track {
     let bankAngle = 0;
 
     if (this.data.mapLayout === 'OVAL') {
-      // Smooth NASCAR Banking Transition:
-      // Uses the unit tangent X deflection with a quintic smootherstep (zero 1st & 2nd derivatives at both ends).
-      // Rolls progressively across 170m+ between 12° (0.21 rad) on the straights and 34° (0.59 rad) in the turns.
-      // Eliminates steps, ridges, or physics jolts completely.
       const turnDeflection = Math.abs(tangent.x);
       const p = Math.min(1.0, Math.max(0.0, (turnDeflection - 0.04) / 0.66));
-      const w = p * p * p * (p * (p * 6 - 15) + 10); // Quintic smootherstep
+      const w = p * p * p * (p * (p * 6 - 15) + 10);
       const ovalBank = 0.21 + w * 0.38;
       bankAngle = -ovalBank;
     } else {
-      // Continuous smooth sigmoid banking for road courses (eliminates clamp kinks)
       const dt = 0.005;
       const tNext = (normalizedT + dt) % 1.0;
       const tPrev = (normalizedT - dt + 1.0) % 1.0;

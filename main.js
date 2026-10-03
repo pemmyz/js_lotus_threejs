@@ -2,7 +2,8 @@
    AMIGA TURBO RACER - MAIN CONTROLLER & SPLIT ENGINE
    Handles Three.js rendering, horizontal split-screen,
    responsive scaling, mobile controls, FPS counter,
-   pitstop service (fuel, damage, tires), and HUD states.
+   pitstop service (fuel, damage, tires), procedural
+   cloud system updates, and HUD states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -275,7 +276,6 @@ class Game {
       document.addEventListener('touchend', onDocTouch);
     }
 
-    // Damage Checkboxes Synchronization
     const devDamageCheck = document.getElementById('dev-obstacle-damage');
     const optDamageCheck = document.getElementById('opt-damage');
     const onDamageChange = (e) => {
@@ -286,7 +286,6 @@ class Game {
     if (devDamageCheck) devDamageCheck.addEventListener('change', onDamageChange);
     if (optDamageCheck) optDamageCheck.addEventListener('change', onDamageChange);
 
-    // Dev Infinite Armor (God Mode), Tires, Fuel, Turbo
     document.getElementById('dev-infinite-armor')?.addEventListener('change', (e) => {
       window.ATR.devSettings.infiniteArmor = e.target.checked;
       if (e.target.checked) {
@@ -323,7 +322,6 @@ class Game {
       window.ATR.devSettings.disableAiEnvCollisions = e.target.checked;
     });
 
-    // Dev: Damage all AI cars to test pitstop entry and repairs
     const damageAiBtn = document.getElementById('dev-damage-ai');
     if (damageAiBtn) {
       bindTap(damageAiBtn, () => {
@@ -339,7 +337,6 @@ class Game {
       });
     }
 
-    // Lap Selector Synchronization (Main Menu & Options)
     const menuLapsSelect = document.getElementById('menu-laps-select');
     const optLapsSelect = document.getElementById('opt-laps');
 
@@ -366,7 +363,6 @@ class Game {
       });
     }
 
-    // 50 Cars & +5 Cars Dev Handlers
     const set50Btn = document.getElementById('dev-set-50-cars');
     if (set50Btn) {
       bindTap(set50Btn, () => {
@@ -423,7 +419,6 @@ class Game {
       });
     }
 
-    // Circuit Map, Dynamic Environment, and Direction Selectors
     const mapSelect = document.getElementById('menu-map-select');
     const envRow = document.getElementById('menu-env-row');
     const envSelect = document.getElementById('menu-env-select');
@@ -553,6 +548,9 @@ class Game {
     document.getElementById('minimap-container').classList.remove('hidden');
 
     if (this.track) {
+      if (this.track.clouds && typeof this.track.clouds.dispose === 'function') {
+        this.track.clouds.dispose();
+      }
       this.scene.remove(this.track.roadMesh);
       this.scene.remove(this.track.shoulderMesh);
       this.scene.remove(this.track.terrainMesh);
@@ -600,7 +598,7 @@ class Game {
       this.player2 = null;
     }
 
-    // Configurable AI Competitors
+    // AI Racers
     const aiSelectEl = document.getElementById('menu-ai-count');
     const selectedAi = aiSelectEl ? parseInt(aiSelectEl.value, 10) : this.aiCount;
     const maxAi = isSplit ? Math.min(selectedAi, 50) : selectedAi;
@@ -705,7 +703,6 @@ class Game {
     if (steerR) player.steer(1, delta);
     if (turbo) player.activateTurbo();
 
-    // Pitstop trigger: change tires, refuel, and repair armor
     if (this.track.pitZone) {
       const pDist = player.mesh.position.distanceTo(this.track.pitZone.center);
       const inPitArea = pDist < 16.0;
@@ -877,28 +874,24 @@ class Game {
       timeEl.innerText = this.formatTime(player.currentLapTime);
     }
 
-    // Health / Armor HUD Bar
     const healthBar = document.getElementById(`${hudPrefix}-health-bar`);
     if (healthBar) {
       healthBar.style.width = `${Math.max(0, player.health)}%`;
       healthBar.classList.toggle('low-health', player.health < 25);
     }
 
-    // Tires HUD Bar
     const tireBar = document.getElementById(`${hudPrefix}-tire-bar`);
     if (tireBar) {
       tireBar.style.width = `${Math.max(0, player.tires)}%`;
       tireBar.classList.toggle('low-tires', player.tires < 25);
     }
 
-    // Fuel HUD Bar
     const fuelBar = document.getElementById(`${hudPrefix}-fuel-bar`);
     if (fuelBar) {
       fuelBar.style.width = `${player.fuel}%`;
       fuelBar.classList.toggle('low-fuel', player.fuel < 22);
     }
 
-    // Turbo HUD Bar
     const turboBar = document.getElementById(`${hudPrefix}-turbo-bar`);
     if (turboBar) turboBar.style.width = `${player.turbo}%`;
 
@@ -947,7 +940,6 @@ class Game {
       y: pad + ((z - minZ) / spanZ) * (h - pad * 2)
     });
 
-    // Track Ribbon
     ctx.beginPath();
     const first = toMap(this.minimapTrackPoints[0].x, this.minimapTrackPoints[0].z);
     ctx.moveTo(first.x, first.y);
@@ -967,14 +959,12 @@ class Game {
     ctx.lineWidth = 7;
     ctx.stroke();
 
-    // Start/Finish Line Indicator
     const finishPos = toMap(this.track.spline.getPointAt(0.01).x, this.track.spline.getPointAt(0.01).z);
     ctx.fillStyle = '#ff0055';
     ctx.beginPath();
     ctx.arc(finishPos.x, finishPos.y, 9, 0, Math.PI * 2);
     ctx.fill();
 
-    // AI Racers
     for (let i = 0; i < this.aiCars.length; i++) {
       const car = this.aiCars[i].car;
       const pos = toMap(car.mesh.position.x, car.mesh.position.z);
@@ -984,7 +974,6 @@ class Game {
       ctx.fill();
     }
 
-    // Player 2
     if (this.player2) {
       const p2Pos = toMap(this.player2.mesh.position.x, this.player2.mesh.position.z);
       ctx.fillStyle = '#00c3ff';
@@ -996,7 +985,6 @@ class Game {
       ctx.stroke();
     }
 
-    // Player 1
     if (this.player1) {
       const p1Pos = toMap(this.player1.mesh.position.x, this.player1.mesh.position.z);
       ctx.fillStyle = '#ff2244';
@@ -1052,6 +1040,10 @@ class Game {
       this.smokeSystem.clear();
     }
 
+    if (this.track && this.track.clouds && typeof this.track.clouds.dispose === 'function') {
+      this.track.clouds.dispose();
+    }
+
     this.allCars.forEach(c => this.scene.remove(c.mesh));
     this.allCars = [];
     this.aiCars = [];
@@ -1074,6 +1066,11 @@ class Game {
       if (this.fpsElement) this.fpsElement.innerText = `FPS: ${fps}`;
       this.frameCount = 0;
       this.lastFpsTime = now;
+    }
+
+    // Update procedural clouds across all active tracks
+    if (this.track && this.track.clouds && typeof this.track.clouds.update === 'function') {
+      this.track.clouds.update(delta);
     }
 
     if (this.state === 'MENU') {
