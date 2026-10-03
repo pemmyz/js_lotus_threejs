@@ -269,7 +269,6 @@ class Track {
         cloudColor: cloudColor,
         opacity: cloudOpacity,
         getHeightAt: (x, z) => {
-          // Keep clouds floating cleanly above the center mountain
           if (this.data.mapLayout === 'OVAL') return 10;
           const dist = Math.hypot(x, z);
           if (dist < 105) {
@@ -1028,20 +1027,13 @@ class Track {
 
     let bankAngle = 0;
 
+    // Banking is strictly applied to the NASCAR OVAL superspeedway
     if (this.data.mapLayout === 'OVAL') {
       const turnDeflection = Math.abs(tangent.x);
       const p = Math.min(1.0, Math.max(0.0, (turnDeflection - 0.04) / 0.66));
       const w = p * p * p * (p * (p * 6 - 15) + 10);
       const ovalBank = 0.21 + w * 0.38;
       bankAngle = -ovalBank;
-    } else {
-      const dt = 0.005;
-      const tNext = (normalizedT + dt) % 1.0;
-      const tPrev = (normalizedT - dt + 1.0) % 1.0;
-      const tanNext = this.spline.getTangentAt(tNext);
-      const tanPrev = this.spline.getTangentAt(tPrev);
-      const turnCurvature = (tanNext.x * tanPrev.z - tanNext.z * tanPrev.x);
-      bankAngle = -0.25 * Math.tanh(turnCurvature * 80.0);
     }
 
     if (Math.abs(bankAngle) > 0.005) {
