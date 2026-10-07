@@ -3,7 +3,7 @@
    Handles Three.js rendering, horizontal split-screen,
    responsive scaling, mobile controls, FPS counter,
    pitstop service (fuel, damage, tires), procedural
-   cloud system updates, and HUD states.
+   cloud system updates, pause states, and HUD states.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -38,6 +38,7 @@ class Game {
 
     this.mode = 'SINGLE';
     this.state = 'MENU';
+    this.pausedFromState = null;
     this.seed = 849271;
     this.mapLayout = 'ORIGINAL';
     this.envType = 'FOREST';
@@ -134,6 +135,17 @@ class Game {
 
   setupInputs() {
     window.addEventListener('keydown', e => {
+      // Pause toggle with P or Escape key
+      if (e.code === 'KeyP' || e.code === 'Escape') {
+        if (this.state === 'RACING' || this.state === 'COUNTDOWN') {
+          this.pauseGame();
+          return;
+        } else if (this.state === 'PAUSED') {
+          this.resumeGame();
+          return;
+        }
+      }
+
       this.keys[e.code] = true;
       if (window.ATR.Audio && !window.ATR.Audio.isStarted) {
         window.ATR.Audio.init();
@@ -192,11 +204,14 @@ class Game {
     window.addEventListener('fullscreenchange', onResize);
     window.addEventListener('webkitfullscreenchange', onResize);
 
+    // Pause when window/tab loses focus
+    window.addEventListener('blur', () => {
+      this.pauseGame();
+    });
+
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        this.clock.stop();
-      } else {
-        this.clock.start();
+        this.pauseGame();
       }
     });
   }
@@ -487,6 +502,33 @@ class Game {
       this.startRace(this.mode);
     });
     bindTap(document.getElementById('btn-results-menu'), () => this.returnToMenu());
+    bindTap(document.getElementById('btn-resume-race'), () => this.resumeGame());
+  }
+
+  pauseGame() {
+    if (this.state !== 'RACING' && this.state !== 'COUNTDOWN') return;
+    this.pausedFromState = this.state;
+    this.state = 'PAUSED';
+    this.clock.stop();
+    this.keys = {};
+    if (window.ATR.Audio) window.ATR.Audio.stopEngines();
+
+    const pauseOverlay = document.getElementById('pause-screen');
+    if (pauseOverlay) pauseOverlay.classList.remove('hidden');
+  }
+
+  resumeGame() {
+    if (this.state !== 'PAUSED') return;
+    this.state = this.pausedFromState || 'RACING';
+    this.pausedFromState = null;
+    this.clock.start();
+
+    const pauseOverlay = document.getElementById('pause-screen');
+    if (pauseOverlay) pauseOverlay.classList.add('hidden');
+
+    if (window.ATR.Audio) {
+      window.ATR.Audio.startEngines(this.mode === 'TWO_PLAYER');
+    }
   }
 
   spawnAICars(count) {
@@ -536,6 +578,7 @@ class Game {
     document.getElementById('main-menu').classList.add('hidden');
     document.getElementById('options-menu').classList.add('hidden');
     document.getElementById('results-screen').classList.add('hidden');
+    document.getElementById('pause-screen')?.classList.add('hidden');
     this.showcaseCar.visible = false;
 
     const isSplit = (mode === 'TWO_PLAYER');
@@ -1029,6 +1072,7 @@ class Game {
   returnToMenu() {
     this.state = 'MENU';
     document.getElementById('results-screen').classList.add('hidden');
+    document.getElementById('pause-screen')?.classList.add('hidden');
     document.getElementById('hud-p1').classList.add('hidden');
     document.getElementById('hud-p2').classList.add('hidden');
     document.getElementById('split-divider').classList.add('hidden');
@@ -1080,6 +1124,26 @@ class Game {
       this.cameraP1.position.set(0, 2.4, 4.5);
       this.cameraP1.lookAt(0, 0.4, -6);
       this.renderer.render(this.scene, this.cameraP1);
+      return;
+    }
+
+    if (this.state === 'PAUSED') {
+      if (this.mode === 'TWO_PLAYER' && this.player2) {
+        const halfH = Math.floor(height / 2);
+        this.renderer.setScissorTest(true);
+        this.renderer.setViewport(0, halfH, width, halfH);
+        this.renderer.setScissor(0, halfH, width, halfH);
+        this.renderer.render(this.scene, this.cameraP1);
+
+        this.renderer.setViewport(0, 0, width, halfH);
+        this.renderer.setScissor(0, 0, width, halfH);
+        this.renderer.render(this.scene, this.cameraP2);
+        this.renderer.setScissorTest(false);
+      } else {
+        this.renderer.setViewport(0, 0, width, height);
+        this.renderer.setScissorTest(false);
+        this.renderer.render(this.scene, this.cameraP1);
+      }
       return;
     }
 

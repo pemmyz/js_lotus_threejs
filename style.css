@@ -634,6 +634,15 @@ body.mobile-mode #minimap-container {
   margin-bottom: 14px;
 }
 
+.pause-desc {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: clamp(12px, 2.8vmin, 15px);
+  line-height: 1.6;
+  color: #c5d7f2;
+  margin: 14px 0 6px 0;
+  letter-spacing: 0.5px;
+}
+
 .seed-badge {
   font-family: 'Press Start 2P', monospace;
   font-size: clamp(8px, 2vmin, 10px);
