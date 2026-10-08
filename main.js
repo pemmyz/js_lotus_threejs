@@ -22,6 +22,9 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+    // Pixel resolution controller (0.25 = 1/4 native res for retro pixel look)
+    this.pixelController = new window.ATR.PixelResolutionController(this.renderer, this.canvas, 0.25);
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0c18);
 
@@ -95,7 +98,9 @@ class Game {
       this.screenElement.style.transform = 'none';
     }
 
-    if (this.renderer) {
+    if (this.pixelController) {
+      this.pixelController.update();
+    } else if (this.renderer) {
       this.renderer.setSize(w, h);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     }
@@ -260,6 +265,25 @@ class Game {
       bindTap(mobileBtn, () => {
         this.toggleFullscreen();
       });
+    }
+
+    // --- PIXEL MODE TOGGLE BINDINGS ---
+    const devPixelCheck = document.getElementById('dev-pixel-mode');
+    const optPixelCheck = document.getElementById('opt-pixel-mode');
+
+    const onPixelModeChange = (enabled) => {
+      if (this.pixelController) {
+        this.pixelController.setPixelMode(enabled);
+      }
+      if (devPixelCheck) devPixelCheck.checked = enabled;
+      if (optPixelCheck) optPixelCheck.checked = enabled;
+    };
+
+    if (devPixelCheck) {
+      devPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
+    }
+    if (optPixelCheck) {
+      optPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
     }
 
     // --- DEV MENU CONTROLS ---

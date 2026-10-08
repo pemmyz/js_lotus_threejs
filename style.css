@@ -24,6 +24,14 @@ html, body {
   color: #fff;
 }
 
+/* Enables crisp, nearest-neighbor scaling on the canvas */
+.pixel-art-canvas {
+  image-rendering: -moz-crisp-edges !important;   /* Firefox */
+  image-rendering: -webkit-crisp-edges !important;/* Safari */
+  image-rendering: pixelated !important;          /* Chrome / Edge / Opera */
+  image-rendering: crisp-edges !important;        /* Standard */
+}
+
 /* --- MOBILE MODE LOCK --- */
 body.mobile-mode {
   position: fixed;
