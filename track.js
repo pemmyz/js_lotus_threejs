@@ -37,7 +37,8 @@ class TrackGenerator {
 
       const ovalWaypoints = 120;
       for (let i = 0; i < ovalWaypoints; i++) {
-        const s = (i / ovalWaypoints) * totalPerimeter;
+        const step = counterClockwise ? ((ovalWaypoints - i) % ovalWaypoints) : i;
+        const s = (step / ovalWaypoints) * totalPerimeter;
         let x = 0;
         let z = 0;
 
@@ -73,7 +74,7 @@ class TrackGenerator {
         seed,
         envType,
         mapLayout,
-        counterClockwise: false
+        counterClockwise: !!counterClockwise
       };
     }
 
@@ -669,15 +670,16 @@ class Track {
       const normal = roadInfo.normal;
       const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
+      const outerSide = (isOval && this.data.counterClockwise) ? -1 : 1;
       const baseDist = (this.roadWidth * 0.5) + (isOval ? 8 : 4);
       let distFromRoad = baseDist + (i % 5) * 6;
 
-      if (isOval && side === 1) {
+      if (isOval && side === outerSide) {
         distFromRoad = (this.roadWidth * 0.5) + this.shoulderWidth;
       }
 
       const objPos = point.clone().addScaledVector(normal, side * distFromRoad);
-      if (isOval && side === 1) {
+      if (isOval && side === outerSide) {
         objPos.addScaledVector(roadUp, 0.06);
       }
 
@@ -704,7 +706,7 @@ class Track {
 
         // Ground level on regular circuits, track level on oval
         const rockY = isOval
-          ? (side === 1 ? objPos.y + (isBigBoulder ? 0.6 : 0.2) : objPos.y + (isBigBoulder ? 1.4 : 0.4))
+          ? (side === outerSide ? objPos.y + (isBigBoulder ? 0.6 : 0.2) : objPos.y + (isBigBoulder ? 1.4 : 0.4))
           : (isBigBoulder ? 1.2 : 0.4);
 
         rock.position.set(objPos.x, rockY, objPos.z);
@@ -1053,7 +1055,7 @@ class Track {
       const p = Math.min(1.0, Math.max(0.0, (turnDeflection - 0.04) / 0.66));
       const w = p * p * p * (p * (p * 6 - 15) + 10);
       const ovalBank = 0.21 + w * 0.38;
-      bankAngle = -ovalBank;
+      bankAngle = this.data.counterClockwise ? ovalBank : -ovalBank;
     }
 
     if (Math.abs(bankAngle) > 0.005) {

@@ -21,43 +21,49 @@
   <div id="dev-menu-container">
     <button id="dev-menu-btn">DEV ▾</button>
     <div id="dev-menu-dropdown" class="hidden">
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-pixel-mode">
-        <span>Low-Res Pixel Mode</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-obstacle-damage" checked>
-        <span>Obstacle Damage</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-infinite-armor">
-        <span>Infinite Armor (God Mode)</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-infinite-tires">
-        <span>Infinite Tires</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-infinite-fuel">
-        <span>Infinite Fuel</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-infinite-turbo">
-        <span>Infinite Turbo</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-disable-ai-cars">
-        <span>Disable AI vs Cars</span>
-      </label>
-      <label class="dev-menu-item">
-        <input type="checkbox" id="dev-disable-ai-env">
-        <span>Disable AI vs Env</span>
-      </label>
+      <!-- Column 1: Core Toggles & Cheats -->
+      <div class="dev-menu-col">
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-pixel-mode">
+          <span>Low-Res Pixel Mode</span>
+        </label>
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-obstacle-damage" checked>
+          <span>Obstacle Damage</span>
+        </label>
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-infinite-armor">
+          <span>Infinite Armor</span>
+        </label>
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-infinite-tires">
+          <span>Infinite Tires</span>
+        </label>
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-infinite-fuel">
+          <span>Infinite Fuel</span>
+        </label>
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-infinite-turbo">
+          <span>Infinite Turbo</span>
+        </label>
+      </div>
 
-      <div class="dev-menu-separator"></div>
-      <button type="button" id="dev-damage-ai" class="dev-menu-btn-action" style="color:#ff4466; border-color:#ff4466;">💥 Damage AI Cars</button>
-      <button type="button" id="dev-set-50-cars" class="dev-menu-btn-action">🏎️ 50 Cars</button>
-      <button type="button" id="dev-add-5-cars" class="dev-menu-btn-action">⚡ Add +5 Cars</button>
+      <!-- Column 2: AI Settings & Spawn Actions -->
+      <div class="dev-menu-col">
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-disable-ai-cars">
+          <span>Disable AI Cars</span>
+        </label>
+        <label class="dev-menu-item">
+          <input type="checkbox" id="dev-disable-ai-env">
+          <span>Disable AI Env</span>
+        </label>
+        <div class="dev-menu-separator"></div>
+        <button type="button" id="dev-damage-ai" class="dev-menu-btn-action" style="color:#ff4466; border-color:#ff4466;">💥 Damage AI</button>
+        <button type="button" id="dev-set-50-cars" class="dev-menu-btn-action">🏎️ 50 Cars</button>
+        <button type="button" id="dev-add-5-cars" class="dev-menu-btn-action">⚡ +5 Cars</button>
+      </div>
     </div>
   </div>
 
@@ -260,9 +266,9 @@
               </select>
             </div>
 
-            <!-- Counter-Clockwise Checkbox Toggle -->
+            <!-- Counter-Clockwise / Reversed Checkbox Toggle -->
             <div class="menu-config-row">
-              <label for="menu-counter-clockwise">COUNTER-CLOCKWISE:</label>
+              <label for="menu-counter-clockwise" id="menu-counter-clockwise-label">COUNTER-CLOCKWISE:</label>
               <input type="checkbox" id="menu-counter-clockwise" style="accent-color: #00ffff; width: 18px; height: 18px; cursor: pointer;">
             </div>
 

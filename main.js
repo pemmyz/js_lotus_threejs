@@ -462,9 +462,14 @@ class Game {
     const envRow = document.getElementById('menu-env-row');
     const envSelect = document.getElementById('menu-env-select');
     const ccwCheckbox = document.getElementById('menu-counter-clockwise');
+    const ccwLabel = document.getElementById('menu-counter-clockwise-label') || document.querySelector('label[for="menu-counter-clockwise"]');
 
     const updateMapSelection = () => {
       this.mapLayout = mapSelect ? mapSelect.value : 'ORIGINAL';
+
+      if (ccwLabel) {
+        ccwLabel.innerText = this.mapLayout === 'OVAL' ? 'REVERSED:' : 'COUNTER-CLOCKWISE:';
+      }
 
       if (this.mapLayout === 'ORIGINAL') {
         if (envRow) envRow.classList.remove('hidden');
