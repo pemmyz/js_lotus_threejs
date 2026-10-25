@@ -2,7 +2,7 @@
    AMIGA TURBO RACER - PROCEDURAL TRACK GENERATOR
    Creates dynamic 3D ribbon road geometry, Catmull-Rom
    spline elevation, roadside signs, scenery, banked corners,
-   oval superspeedways, pit lane and procedural clouds.
+   oval superspeedways, pit lane, corner indications, and procedural clouds.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -239,6 +239,7 @@ class Track {
       this.buildCenterMountain();
     }
     this.buildRoadsideScenery();
+    this.buildCornerSigns();
     this.buildObstacles();
 
     // ----------------------------------------------------
@@ -547,7 +548,9 @@ class Track {
       new THREE.MeshBasicMaterial({ map: bannerTex })
     );
     bannerMesh.position.copy(startPoint).addScaledVector(roadUp, 7.5);
-    bannerMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+
+    // Orient banner texture facing oncoming cars approaching forward along +tangent
+    bannerMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
 
     bannerGroup.add(p1, p2, bannerMesh);
     this.sceneryGroup.add(bannerGroup);
@@ -713,22 +716,12 @@ class Track {
         this.sceneryGroup.add(rock);
 
       } else {
-        const sign = this.createSignMesh(side > 0 ? 'RIGHT' : 'LEFT');
-
-        if (isOval) {
-          // Untouched track-level placement on oval
-          sign.position.copy(point).addScaledVector(normal, side * ((this.roadWidth * 0.5) + 2.0)).addScaledVector(roadUp, 0.2);
-          sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
-        } else {
-          // Ground level (y = 0) placement on all other maps
-          const signPos = point.clone().addScaledVector(normal, side * ((this.roadWidth * 0.5) + 2.0));
-          signPos.y = 0;
-          sign.position.copy(signPos);
-          const forward = new THREE.Vector3(-tangent.x, 0, -tangent.z).normalize();
-          sign.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), forward);
-        }
-
-        this.sceneryGroup.add(sign);
+        // Diverse roadside rock variations; corner indications are specifically placed by buildCornerSigns()
+        const isBig = (i % 2 === 0);
+        const extraRock = this.createRockMesh(isBig);
+        const rockY = isOval ? (objPos.y + 0.3) : (isBig ? 1.0 : 0.3);
+        extraRock.position.set(objPos.x, rockY, objPos.z);
+        this.sceneryGroup.add(extraRock);
       }
     }
   }
@@ -876,28 +869,88 @@ class Track {
 
   createSignMesh(direction = 'RIGHT') {
     const group = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3), new THREE.MeshBasicMaterial({ color: 0xcccccc }));
-    pole.position.y = 1.5;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3.2), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
+    pole.position.y = 1.6;
 
     const boardCanvas = document.createElement('canvas');
-    boardCanvas.width = 64;
+    boardCanvas.width = 128;
     boardCanvas.height = 64;
     const ctx = boardCanvas.getContext('2d');
-    ctx.fillStyle = '#ff0055';
-    ctx.fillRect(0, 0, 64, 64);
+
+    // High-visibility retro arcade chevron board
+    ctx.fillStyle = '#e6004c';
+    ctx.fillRect(0, 0, 128, 64);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 124, 60);
+
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px monospace';
+    ctx.font = '900 42px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(direction === 'RIGHT' ? '>>>' : '<<<', 32, 45);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(direction === 'RIGHT' ? '>>>' : '<<<', 64, 34);
 
     const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.8, 1.8),
+      new THREE.PlaneGeometry(2.4, 1.3),
       new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas), side: THREE.DoubleSide })
     );
-    board.position.y = 2.8;
+    board.position.y = 2.4;
 
     group.add(pole, board);
     return group;
+  }
+
+  buildCornerSigns() {
+    const samples = (this.data.mapLayout === 'OVAL') ? 320 : 360;
+    const minSpacingDist = 20.0; // Distance between chevron boards along a bend
+    const minSpacingT = minSpacingDist / this.totalLength;
+    const dt = 0.007;
+    let lastSignT = -999;
+
+    for (let i = 0; i < samples; i++) {
+      const t = i / samples;
+
+      // Skip start/finish and pit lane straights
+      if (t > 0.0 && t < 0.09) continue;
+      if (t > 0.98) continue;
+
+      if (Math.abs(t - lastSignT) < minSpacingT) continue;
+
+      const tPrev = ((t - dt) % 1.0 + 1.0) % 1.0;
+      const tNext = (t + dt) % 1.0;
+
+      const roadInfo = this.getRoadTransformAt(t);
+      const tanPrev = this.spline.getTangentAt(tPrev).normalize();
+      const tanNext = this.spline.getTangentAt(tNext).normalize();
+      const deltaTan = tanNext.sub(tanPrev);
+      const turnVal = deltaTan.dot(roadInfo.normal);
+
+      // Only trigger where track curvature indicates an active bend
+      if (Math.abs(turnVal) < 0.035) continue;
+
+      const isRightTurn = turnVal > 0;
+      // Arrow points in direction of turn: 'RIGHT' (>>>) or 'LEFT' (<<<)
+      const signDirection = isRightTurn ? 'RIGHT' : 'LEFT';
+      // Outside of right turn is driver's left (-1); outside of left turn is driver's right (+1)
+      const outerSide = isRightTurn ? -1 : 1;
+
+      const sign = this.createSignMesh(signDirection);
+      const signOffset = (this.roadWidth * 0.5) + this.shoulderWidth + 1.2;
+      const roadUp = new THREE.Vector3().crossVectors(roadInfo.normal, roadInfo.tangent).normalize();
+      const signForward = roadInfo.tangent.clone().negate();
+
+      // Orient sign upright to track banking and facing oncoming traffic
+      const basisMatrix = new THREE.Matrix4().makeBasis(roadInfo.normal, roadUp, signForward);
+      sign.quaternion.setFromRotationMatrix(basisMatrix);
+
+      const signPos = roadInfo.center.clone()
+        .addScaledVector(roadInfo.normal, outerSide * signOffset)
+        .addScaledVector(roadUp, 0.05);
+      sign.position.copy(signPos);
+
+      this.sceneryGroup.add(sign);
+      lastSignT = t;
+    }
   }
 
   createLogMesh(length = 6.8) {
