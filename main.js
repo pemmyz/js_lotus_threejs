@@ -275,6 +275,7 @@ class Game {
     if (optPixelCheck) optPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
 
     window.ATR.devSettings = {
+      smoothCamera: true,
       obstacleDamage: true,
       infiniteArmor: false,
       infiniteTires: false,
@@ -300,6 +301,14 @@ class Game {
       };
       document.addEventListener('click', onDocTouch);
       document.addEventListener('touchend', onDocTouch);
+    }
+
+    const devSmoothCheck = document.getElementById('dev-smooth-camera');
+    if (devSmoothCheck) {
+      devSmoothCheck.checked = window.ATR.devSettings.smoothCamera;
+      devSmoothCheck.addEventListener('change', (e) => {
+        window.ATR.devSettings.smoothCamera = e.target.checked;
+      });
     }
 
     const devDamageCheck = document.getElementById('dev-obstacle-damage');
@@ -725,11 +734,18 @@ class Game {
 
   snapCameraToCar(camera, car) {
     const roadInfo = this.track.getRoadTransformAt(car.trackT);
-    const camOffset = roadInfo.tangent.clone().multiplyScalar(-9.5).add(new THREE.Vector3(0, 3.4, 0));
+    const roadUp = new THREE.Vector3().crossVectors(roadInfo.normal, roadInfo.tangent).normalize();
+
+    // Store offset relative to the car
+    const camOffset = roadInfo.tangent.clone().multiplyScalar(-9.5).addScaledVector(roadUp, 3.4);
     camera.position.copy(car.mesh.position).add(camOffset);
-    const lookTarget = car.mesh.position.clone().add(roadInfo.tangent.clone().multiplyScalar(15)).add(new THREE.Vector3(0, 1.2, 0));
+
+    const lookOffset = roadInfo.tangent.clone().multiplyScalar(15.0).addScaledVector(roadUp, 1.2);
+    const lookTarget = car.mesh.position.clone().add(lookOffset);
+
     camera.lookAt(lookTarget);
-    camera.userData.lookTarget = lookTarget.clone();
+    camera.userData.camOffset = camOffset.clone();
+    camera.userData.lookOffset = lookOffset.clone();
   }
 
   runCountdown() {
@@ -905,39 +921,50 @@ class Game {
     if (!car) return;
 
     const roadInfo = this.track.getRoadTransformAt(car.trackT);
-    const camOffset = roadInfo.tangent.clone().multiplyScalar(-9.5).add(new THREE.Vector3(0, 3.4, 0));
-    const targetCamPos = car.mesh.position.clone().add(camOffset);
+    const roadUp = new THREE.Vector3().crossVectors(roadInfo.normal, roadInfo.tangent).normalize();
 
-    if (this.shakeIntensity > 0) {
-      targetCamPos.x += (Math.random() - 0.5) * this.shakeIntensity;
-      targetCamPos.y += (Math.random() - 0.5) * this.shakeIntensity;
-      this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 1.5);
+    // Target position and look offsets anchored relative to car coordinates
+    const targetOffset = roadInfo.tangent.clone().multiplyScalar(-9.5).addScaledVector(roadUp, 3.4);
+    const targetLookOffset = roadInfo.tangent.clone().multiplyScalar(15.0).addScaledVector(roadUp, 1.2);
+
+    if (!camera.userData.camOffset) {
+      camera.userData.camOffset = targetOffset.clone();
+    }
+    if (!camera.userData.lookOffset) {
+      camera.userData.lookOffset = targetLookOffset.clone();
     }
 
-    const isLotus = !!(this.track && this.track.isInfinite);
-    const lookTarget = car.mesh.position.clone().add(roadInfo.tangent.clone().multiplyScalar(15)).add(new THREE.Vector3(0, 1.2, 0));
+    const isSmooth = window.ATR?.devSettings?.smoothCamera !== false;
 
-    if (isLotus) {
-      // Responsive horizontal tracking
-      const horizLerp = 1.0 - Math.exp(-14.0 * delta);
-      camera.position.x += (targetCamPos.x - camera.position.x) * horizLerp;
-      camera.position.z += (targetCamPos.z - camera.position.z) * horizLerp;
+    // Smooth rates: gentle rates when enabled to eliminate rapid view jerking
+    const xzRate = isSmooth ? 2.8 : 12.0;
+    const yRate = isSmooth ? 3.4 : 14.0;
+    const lookRate = isSmooth ? 3.0 : 12.0;
 
-      // Soft vertical dampening to absorb rapid road cresting/dips
-      const vertLerp = 1.0 - Math.exp(-3.5 * delta);
-      camera.position.y += (targetCamPos.y - camera.position.y) * vertLerp;
+    const horizLerp = 1.0 - Math.exp(-xzRate * delta);
+    const vertLerp = 1.0 - Math.exp(-yRate * delta);
+    const lookLerp = 1.0 - Math.exp(-lookRate * delta);
 
-      if (!camera.userData.lookTarget) {
-        camera.userData.lookTarget = lookTarget.clone();
-      } else {
-        camera.userData.lookTarget.x += (lookTarget.x - camera.userData.lookTarget.x) * horizLerp;
-        camera.userData.lookTarget.z += (lookTarget.z - camera.userData.lookTarget.z) * horizLerp;
-        camera.userData.lookTarget.y += (lookTarget.y - camera.userData.lookTarget.y) * vertLerp;
-      }
-      camera.lookAt(camera.userData.lookTarget);
-    } else {
-      camera.position.lerp(targetCamPos, 0.2);
-      camera.lookAt(lookTarget);
+    // Smooth relative offsets (X/Z for turning, Y for elevation changes)
+    camera.userData.camOffset.x += (targetOffset.x - camera.userData.camOffset.x) * horizLerp;
+    camera.userData.camOffset.z += (targetOffset.z - camera.userData.camOffset.z) * horizLerp;
+    camera.userData.camOffset.y += (targetOffset.y - camera.userData.camOffset.y) * vertLerp;
+
+    // Anchoring to car.mesh.position guarantees height stays identical uphill/downhill/flat
+    camera.position.copy(car.mesh.position).add(camera.userData.camOffset);
+
+    // Smooth look-at target offset
+    camera.userData.lookOffset.x += (targetLookOffset.x - camera.userData.lookOffset.x) * lookLerp;
+    camera.userData.lookOffset.z += (targetLookOffset.z - camera.userData.lookOffset.z) * lookLerp;
+    camera.userData.lookOffset.y += (targetLookOffset.y - camera.userData.lookOffset.y) * vertLerp;
+
+    const lookTarget = car.mesh.position.clone().add(camera.userData.lookOffset);
+    camera.lookAt(lookTarget);
+
+    if (this.shakeIntensity > 0) {
+      camera.position.x += (Math.random() - 0.5) * this.shakeIntensity;
+      camera.position.y += (Math.random() - 0.5) * this.shakeIntensity;
+      this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 1.5);
     }
 
     const speedRatio = car.speed / car.maxSpeed;
