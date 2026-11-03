@@ -41,7 +41,7 @@ class Game {
     this.state = 'MENU';
     this.pausedFromState = null;
     this.seed = 849271;
-    this.mapLayout = 'ORIGINAL';
+    this.mapLayout = 'LOTUS';
     this.envType = 'FOREST';
     this.totalLaps = 3;
     this.aiCount = 3;
@@ -461,7 +461,7 @@ class Game {
     const ccwLabel = document.getElementById('menu-counter-clockwise-label') || document.querySelector('label[for="menu-counter-clockwise"]');
 
     const updateMapSelection = () => {
-      this.mapLayout = mapSelect ? mapSelect.value : 'ORIGINAL';
+      this.mapLayout = mapSelect ? mapSelect.value : 'LOTUS';
 
       const lapsRow = document.getElementById('menu-laps-row') || menuLapsSelect?.closest('.menu-config-row');
       const ccwRow = document.getElementById('menu-ccw-row') || ccwCheckbox?.closest('.menu-config-row');
