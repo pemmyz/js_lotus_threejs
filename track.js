@@ -1,215 +1,19 @@
 /* ===================================================
-   AMIGA TURBO RACER - PROCEDURAL TRACK GENERATOR
-   Creates dynamic 3D ribbon road geometry, Catmull-Rom
-   spline elevation, roadside signs, scenery, banked corners,
-   oval superspeedways, pit lane, corner indications, and procedural clouds.
+   AMIGA TURBO RACER - CLOSED CIRCUIT TRACK BUILDER
+   Constructs standard circuits, the Daytona NASCAR oval,
+   road ribbon geometry, curbs, roadside props, and pit lane.
+   Serves as entry facade delegating to InfiniteLotusTrack.
    =================================================== */
 
 window.ATR = window.ATR || {};
 
-class TrackGenerator {
-  constructor() {
-    this.roadWidth = 14;
-    this.shoulderWidth = 2.4;
-  }
-
-  createPRNG(seed) {
-    let s = seed % 2147483647;
-    if (s <= 0) s += 2147483646;
-    return function() {
-      s = (s * 16807) % 2147483647;
-      return (s - 1) / 2147483646;
-    };
-  }
-
-  generate(seed = 849271, difficulty = 'MEDIUM', envType = 'FOREST', numWaypoints = 72, mapLayout = 'ORIGINAL', counterClockwise = false) {
-    const random = this.createPRNG(seed);
-    const controlPoints = [];
-
-    // =========================================================
-    // 1. PURE NASCAR SUPERSPEEDWAY OVAL GENERATOR
-    // =========================================================
-    if (mapLayout === 'OVAL') {
-      const straightLen = 720;
-      const turnRadius = 220;
-      const semiCircumference = Math.PI * turnRadius;
-      const totalPerimeter = 2 * straightLen + 2 * semiCircumference;
-
-      const ovalWaypoints = 120;
-      for (let i = 0; i < ovalWaypoints; i++) {
-        const step = counterClockwise ? ((ovalWaypoints - i) % ovalWaypoints) : i;
-        const s = (step / ovalWaypoints) * totalPerimeter;
-        let x = 0;
-        let z = 0;
-
-        if (s < straightLen) {
-          const frac = s / straightLen;
-          x = turnRadius;
-          z = (straightLen / 2) - frac * straightLen;
-        } else if (s < straightLen + semiCircumference) {
-          const arcS = s - straightLen;
-          const phi = arcS / turnRadius;
-          x = turnRadius * Math.cos(phi);
-          z = -straightLen / 2 - turnRadius * Math.sin(phi);
-        } else if (s < 2 * straightLen + semiCircumference) {
-          const frac = (s - (straightLen + semiCircumference)) / straightLen;
-          x = -turnRadius;
-          z = -straightLen / 2 + frac * straightLen;
-        } else {
-          const arcS = s - (2 * straightLen + semiCircumference);
-          const phi = Math.PI + (arcS / turnRadius);
-          x = turnRadius * Math.cos(phi);
-          z = straightLen / 2 - turnRadius * Math.sin(phi);
-        }
-
-        controlPoints.push(new THREE.Vector3(x, 9.5, z));
-      }
-
-      const spline = new THREE.CatmullRomCurve3(controlPoints, true, 'centripetal');
-
-      return {
-        controlPoints,
-        spline,
-        totalLength: spline.getLength(),
-        seed,
-        envType,
-        mapLayout,
-        counterClockwise: !!counterClockwise
-      };
-    }
-
-    // =========================================================
-    // 2. STANDARD PROCEDURAL ROAD CIRCUITS
-    // =========================================================
-    const rawRadii = new Float32Array(numWaypoints);
-    const elevations = new Float32Array(numWaypoints);
-
-    const p1 = random() * Math.PI * 2;
-    const p2 = random() * Math.PI * 2;
-    let hillScale = difficulty === 'HARD' ? 13.0 : 8.0;
-
-    if (mapLayout === 'ALPINE') {
-      hillScale = difficulty === 'HARD' ? 16.5 : 11.0;
-    } else if (mapLayout === 'MIDNIGHT') {
-      hillScale = 4.5;
-    } else if (mapLayout === 'DUNES') {
-      hillScale = 7.0;
-    } else if (mapLayout === 'TROPICAL') {
-      hillScale = 6.5;
-    }
-
-    for (let i = 0; i < numWaypoints; i++) {
-      let angle = (i / numWaypoints) * Math.PI * 2;
-      if (counterClockwise) {
-        angle = (((numWaypoints - i) % numWaypoints) / numWaypoints) * Math.PI * 2;
-      }
-
-      let r = 290;
-
-      if (mapLayout === 'TROPICAL') {
-        const rx = 245 + random() * 20;
-        const rz = 365 + random() * 25;
-        const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
-        const islandEsses = Math.sin(angle * 3 + p1) * 48 + Math.cos(angle * 5 + p2) * 24;
-        r = base + islandEsses;
-
-      } else if (mapLayout === 'SERPENTINE') {
-        const rx = 230 + random() * 25;
-        const rz = 360 + random() * 30;
-        const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
-        const sCurves = Math.sin(angle * 4 + p1) * 52 + Math.cos(angle * 7 + p2) * 26;
-        r = base + sCurves;
-
-      } else if (mapLayout === 'DUNES') {
-        const rx = 245 + Math.sin(angle) * 45;
-        const rz = 370 + random() * 25;
-        const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
-        const dunesWiggle = Math.sin(angle * 3 + p1) * 54 + Math.cos(angle * 5) * 24;
-        r = base + dunesWiggle;
-
-      } else if (mapLayout === 'ALPINE') {
-        const triLobe = Math.cos(angle * 3 + p1) * 62;
-        const technical = Math.sin(angle * 6 + p2) * 26;
-        r = 295 + triLobe + technical;
-
-      } else if (mapLayout === 'FJORD') {
-        const rx = 210 + random() * 20;
-        const rz = 390 + random() * 30;
-        const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
-        const coastalBays = Math.cos(angle * 2 + p1) * 55 + Math.sin(angle * 5 + p2) * 28;
-        r = base + coastalBays;
-
-      } else if (mapLayout === 'MIDNIGHT') {
-        const p = 3.2;
-        const cosA = Math.cos(angle + p1);
-        const sinA = Math.sin(angle + p1);
-        const rx = 240 + random() * 25;
-        const rz = 355 + random() * 30;
-        const superR = 1.0 / Math.pow(Math.pow(Math.abs(cosA / rx), p) + Math.pow(Math.abs(sinA / rz), p), 1 / p);
-        r = superR + Math.sin(angle * 4 + p2) * 32 + Math.cos(angle * 7) * 14;
-
-      } else {
-        const rx = 240 + random() * 30;
-        const rz = 370 + random() * 35;
-        const base = (rx * rz) / Math.max(1, Math.hypot(rz * Math.sin(angle), rx * Math.cos(angle)));
-        r = base + Math.sin(angle * 2 + p1) * 38 + Math.cos(angle * 3 + p2) * 24;
-      }
-
-      const distFromStart = Math.min(angle, Math.PI * 2 - angle);
-      const straightBlend = Math.min(1.0, distFromStart / 0.32);
-      const neutralRadius = 310;
-      r = neutralRadius * (1.0 - straightBlend) + r * straightBlend;
-
-      rawRadii[i] = Math.max(185, Math.min(415, r));
-      elevations[i] = Math.max(0, (Math.sin(angle * 3) * hillScale + Math.cos(angle * 5) * (hillScale * 0.45)) * straightBlend);
-    }
-
-    const maxDelta = 14.5;
-    for (let pass = 0; pass < 2; pass++) {
-      for (let i = 0; i < numWaypoints; i++) {
-        const next = (i + 1) % numWaypoints;
-        const diff = rawRadii[next] - rawRadii[i];
-        if (Math.abs(diff) > maxDelta) {
-          rawRadii[next] = rawRadii[i] + Math.sign(diff) * maxDelta;
-        }
-      }
-    }
-
-    const finalRadii = new Float32Array(numWaypoints);
-    for (let i = 0; i < numWaypoints; i++) {
-      const prev = (i - 1 + numWaypoints) % numWaypoints;
-      const next = (i + 1) % numWaypoints;
-      finalRadii[i] = rawRadii[prev] * 0.22 + rawRadii[i] * 0.56 + rawRadii[next] * 0.22;
-    }
-
-    for (let i = 0; i < numWaypoints; i++) {
-      let angle = (i / numWaypoints) * Math.PI * 2;
-      if (counterClockwise) {
-        angle = (((numWaypoints - i) % numWaypoints) / numWaypoints) * Math.PI * 2;
-      }
-      const r = finalRadii[i];
-      const x = Math.sin(angle) * r;
-      const z = -Math.cos(angle) * r;
-      const y = elevations[i];
-      controlPoints.push(new THREE.Vector3(x, y, z));
-    }
-
-    const spline = new THREE.CatmullRomCurve3(controlPoints, true, 'centripetal');
-
-    return {
-      controlPoints,
-      spline,
-      totalLength: spline.getLength(),
-      seed,
-      envType,
-      mapLayout,
-      counterClockwise
-    };
-  }
-}
-
 class Track {
   constructor(scene, trackData) {
+    // If LOTUS endless highway selected, instantiate and return InfiniteLotusTrack
+    if (trackData && (trackData.mapLayout === 'LOTUS' || trackData.isInfinite)) {
+      return new window.ATR.InfiniteLotusTrack(scene, trackData);
+    }
+
     this.scene = scene;
     this.data = trackData;
     this.spline = trackData.spline;
@@ -242,9 +46,6 @@ class Track {
     this.buildCornerSigns();
     this.buildObstacles();
 
-    // ----------------------------------------------------
-    // PROCEDURAL CLOUD SYSTEM INSTANTIATION
-    // ----------------------------------------------------
     const isOval = this.data.mapLayout === 'OVAL';
     let cloudColor = 0xffffff;
     let cloudOpacity = 0.45;
@@ -284,6 +85,33 @@ class Track {
     }
 
     this.scene.add(this.sceneryGroup);
+  }
+
+  dispose() {
+    if (this.roadMesh) {
+      this.scene.remove(this.roadMesh);
+      if (this.roadMesh.geometry) this.roadMesh.geometry.dispose();
+      if (this.roadMesh.material) this.roadMesh.material.dispose();
+    }
+    if (this.shoulderMesh) {
+      this.scene.remove(this.shoulderMesh);
+      if (this.shoulderMesh.geometry) this.shoulderMesh.geometry.dispose();
+      if (this.shoulderMesh.material) this.shoulderMesh.material.dispose();
+    }
+    if (this.terrainMesh) {
+      this.scene.remove(this.terrainMesh);
+      if (this.terrainMesh.geometry) this.terrainMesh.geometry.dispose();
+      if (this.terrainMesh.material) this.terrainMesh.material.dispose();
+    }
+    if (this.sceneryGroup) {
+      this.scene.remove(this.sceneryGroup);
+      this.sceneryGroup.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+      });
+    }
+    if (this.clouds && typeof this.clouds.dispose === 'function') {
+      this.clouds.dispose();
+    }
   }
 
   initEnvironmentTheme() {
@@ -386,7 +214,7 @@ class Track {
       shoulderPositions.push(shoulderRightOuter.x, shoulderRightOuter.y, shoulderRightOuter.z);
 
       const isRed = (Math.floor(i / 2) % 2 === 0);
-      const r = isRed ? 0.95 : 0.95;
+      const r = 0.95;
       const g = isRed ? 0.1 : 0.95;
       const b = isRed ? 0.15 : 0.95;
 
@@ -517,43 +345,11 @@ class Track {
   }
 
   buildFinishLine() {
-    const bannerGroup = new THREE.Group();
     const startInfo = this.getRoadTransformAt(0.01);
-    const startPoint = startInfo.center;
-    const tangent = startInfo.tangent;
-    const normal = startInfo.normal;
-    const roadUp = new THREE.Vector3().crossVectors(normal, tangent).normalize();
-
-    const postOffset = (this.roadWidth * 0.5) + 2.5;
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 8, 0.8), pillarMat);
-    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 8, 0.8), pillarMat);
-    p1.position.copy(startPoint).addScaledVector(normal, -postOffset).addScaledVector(roadUp, 4);
-    p2.position.copy(startPoint).addScaledVector(normal, postOffset).addScaledVector(roadUp, 4);
-
-    const bannerCanvas = document.createElement('canvas');
-    bannerCanvas.width = 256;
-    bannerCanvas.height = 64;
-    const ctx = bannerCanvas.getContext('2d');
-    ctx.fillStyle = '#ff0055';
-    ctx.fillRect(0, 0, 256, 64);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 24px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('FINISH / START', 128, 42);
-
-    const bannerTex = new THREE.CanvasTexture(bannerCanvas);
-    const bannerMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(this.roadWidth + 5.0, 2.5, 0.5),
-      new THREE.MeshBasicMaterial({ map: bannerTex })
-    );
-    bannerMesh.position.copy(startPoint).addScaledVector(roadUp, 7.5);
-
-    // Orient banner texture facing oncoming cars approaching forward along +tangent
-    bannerMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent.clone().negate());
-
-    bannerGroup.add(p1, p2, bannerMesh);
-    this.sceneryGroup.add(bannerGroup);
+    const banner = window.ATR.TrackProps.createBanner('FINISH / START', this.roadWidth, '#ff0055');
+    banner.position.copy(startInfo.center);
+    banner.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), startInfo.tangent.clone().negate());
+    this.sceneryGroup.add(banner);
   }
 
   buildPitLane() {
@@ -563,7 +359,7 @@ class Track {
     const signInfo = this.getRoadTransformAt(signT);
     const signOffset = (this.roadWidth * 0.5) + 2.5;
 
-    const pitSignGroup = this.createPitTrafficSign();
+    const pitSignGroup = window.ATR.TrackProps.createPitTrafficSign();
     pitSignGroup.position.copy(signInfo.center).addScaledVector(signInfo.normal, signOffset);
     pitSignGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), signInfo.tangent.clone().negate());
     pitGroup.add(pitSignGroup);
@@ -622,48 +418,12 @@ class Track {
     };
   }
 
-  createPitTrafficSign() {
-    const group = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2), new THREE.MeshBasicMaterial({ color: 0xcccccc }));
-    pole.position.y = 2.1;
-
-    const boardCanvas = document.createElement('canvas');
-    boardCanvas.width = 128;
-    boardCanvas.height = 64;
-    const ctx = boardCanvas.getContext('2d');
-
-    ctx.fillStyle = '#0066cc';
-    ctx.fillRect(0, 0, 128, 64);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, 124, 60);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 18px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('PIT STOP', 64, 27);
-
-    ctx.font = 'bold 24px monospace';
-    ctx.fillStyle = '#ffee00';
-    ctx.fillText('➔ ➔', 64, 52);
-
-    const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.2, 1.6),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas), side: THREE.DoubleSide })
-    );
-    board.position.y = 3.2;
-
-    group.add(pole, board);
-    return group;
-  }
-
   buildRoadsideScenery() {
     const isOval = (this.data.mapLayout === 'OVAL');
     const numObjects = isOval ? 220 : 180;
 
     for (let i = 0; i < numObjects; i++) {
       const t = (i / numObjects + 0.02) % 1.0;
-
       const side = (i % 2 === 0) ? 1 : -1;
       if (side === 1 && t > 0.02 && t < 0.09) continue;
 
@@ -688,26 +448,18 @@ class Track {
 
       if (i % 3 === 0) {
         let plant;
-        if (this.data.envType === 'TROPICAL') {
-          plant = this.createPalmTreeMesh();
-        } else if (this.data.envType === 'DESERT') {
-          plant = this.createCactusMesh();
-        } else if (this.data.envType === 'SNOW') {
-          plant = this.createSnowyPineMesh();
-        } else {
-          plant = this.createTreeMesh();
-        }
+        if (this.data.envType === 'TROPICAL') plant = window.ATR.TrackProps.createPalmTree();
+        else if (this.data.envType === 'DESERT') plant = window.ATR.TrackProps.createCactus();
+        else if (this.data.envType === 'SNOW') plant = window.ATR.TrackProps.createSnowPine();
+        else plant = window.ATR.TrackProps.createTree(this.theme.treeLeaves);
 
-        // Ground level (y = 0) on regular circuits, track level on oval
         const plantY = isOval ? objPos.y : 0;
         plant.position.set(objPos.x, plantY, objPos.z);
         this.sceneryGroup.add(plant);
 
       } else if (i % 3 === 1) {
         const isBigBoulder = (i % 6 === 1);
-        const rock = this.createRockMesh(isBigBoulder);
-
-        // Ground level on regular circuits, track level on oval
+        const rock = window.ATR.TrackProps.createRock(isBigBoulder, this.data.envType);
         const rockY = isOval
           ? (side === outerSide ? objPos.y + (isBigBoulder ? 0.6 : 0.2) : objPos.y + (isBigBoulder ? 1.4 : 0.4))
           : (isBigBoulder ? 1.2 : 0.4);
@@ -716,9 +468,8 @@ class Track {
         this.sceneryGroup.add(rock);
 
       } else {
-        // Diverse roadside rock variations; corner indications are specifically placed by buildCornerSigns()
         const isBig = (i % 2 === 0);
-        const extraRock = this.createRockMesh(isBig);
+        const extraRock = window.ATR.TrackProps.createRock(isBig, this.data.envType);
         const rockY = isOval ? (objPos.y + 0.3) : (isBig ? 1.0 : 0.3);
         extraRock.position.set(objPos.x, rockY, objPos.z);
         this.sceneryGroup.add(extraRock);
@@ -726,194 +477,17 @@ class Track {
     }
   }
 
-  createPalmTreeMesh() {
-    const group = new THREE.Group();
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4b26, roughness: 0.9, flatShading: true });
-    const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x1f9947, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
-    const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
-    const nutMat = new THREE.MeshStandardMaterial({ color: 0x4e3019, roughness: 0.9, flatShading: true });
-
-    const segments = 5;
-    let prevHeight = 0;
-    const trunkLean = (Math.random() - 0.5) * 0.14;
-
-    for (let s = 0; s < segments; s++) {
-      const segH = 1.3;
-      const bottomR = 0.42 - s * 0.04;
-      const topR = 0.38 - s * 0.04;
-      const seg = new THREE.Mesh(new THREE.CylinderGeometry(topR, bottomR, segH, 6), trunkMat);
-      seg.position.set(s * trunkLean * 2.0, prevHeight + segH * 0.5, 0);
-      seg.rotation.z = -trunkLean * (s + 1) * 0.4;
-      group.add(seg);
-      prevHeight += segH * 0.95;
-    }
-
-    const topX = (segments - 1) * trunkLean * 2.0;
-    const topY = prevHeight + 0.2;
-
-    for (let c = 0; c < 3; c++) {
-      const angle = (c / 3) * Math.PI * 2;
-      const nut = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24, 0), nutMat);
-      nut.position.set(topX + Math.sin(angle) * 0.35, topY - 0.2, Math.cos(angle) * 0.35);
-      group.add(nut);
-    }
-
-    const numFronds = 7;
-    for (let f = 0; f < numFronds; f++) {
-      const frondAngle = (f / numFronds) * Math.PI * 2 + Math.random() * 0.2;
-      const frondGroup = new THREE.Group();
-
-      const leafGeo = new THREE.ConeGeometry(0.85, 3.8, 4);
-      leafGeo.rotateZ(Math.PI / 2);
-      const leaf = new THREE.Mesh(leafGeo, f % 2 === 0 ? leafMat1 : leafMat2);
-      leaf.position.x = 1.8;
-      leaf.scale.set(1.0, 0.12, 1.0);
-
-      frondGroup.add(leaf);
-      frondGroup.position.set(topX, topY, 0);
-      frondGroup.rotation.y = frondAngle;
-      frondGroup.rotation.z = 0.42 + (f % 2) * 0.18;
-
-      group.add(frondGroup);
-    }
-
-    const scale = 0.85 + Math.random() * 0.4;
-    group.scale.set(scale, scale, scale);
-    return group;
-  }
-
-  createTreeMesh() {
-    const group = new THREE.Group();
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.9 });
-    const leavesColor = this.theme.treeLeaves[Math.floor(Math.random() * this.theme.treeLeaves.length)];
-    const leavesMat = new THREE.MeshStandardMaterial({ color: leavesColor, roughness: 0.8, flatShading: true });
-
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 5), trunkMat);
-    trunk.position.y = 1.5;
-    group.add(trunk);
-
-    for (let i = 0; i < 3; i++) {
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4 - i * 0.5, 2.6, 5), leavesMat);
-      cone.position.y = 3.2 + i * 1.5;
-      group.add(cone);
-    }
-    const scale = 0.8 + Math.random() * 0.6;
-    group.scale.set(scale, scale, scale);
-    return group;
-  }
-
-  createCactusMesh() {
-    const group = new THREE.Group();
-    const cactusMat = new THREE.MeshStandardMaterial({ color: 0x2e6f40, roughness: 0.85, flatShading: true });
-
-    const height = 4.5 + Math.random() * 2.5;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.42, height, 7), cactusMat);
-    trunk.position.y = height * 0.5;
-    group.add(trunk);
-
-    const armLHoriz = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.2, 6), cactusMat);
-    armLHoriz.rotation.z = Math.PI / 2;
-    armLHoriz.position.set(-0.6, height * 0.52, 0);
-    const armLVert = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.4, 6), cactusMat);
-    armLVert.position.set(-1.1, height * 0.52 + 0.6, 0);
-    group.add(armLHoriz, armLVert);
-
-    const armRHoriz = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.0, 6), cactusMat);
-    armRHoriz.rotation.z = Math.PI / 2;
-    armRHoriz.position.set(0.5, height * 0.65, 0);
-    const armRVert = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.2, 6), cactusMat);
-    armRVert.position.set(0.9, height * 0.65 + 0.5, 0);
-    group.add(armRHoriz, armRVert);
-
-    const scale = 0.8 + Math.random() * 0.4;
-    group.scale.set(scale, scale, scale);
-    return group;
-  }
-
-  createSnowyPineMesh() {
-    const group = new THREE.Group();
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d271d, roughness: 0.9 });
-    const needleMat = new THREE.MeshStandardMaterial({ color: 0x1a4329, roughness: 0.85, flatShading: true });
-    const snowMat = new THREE.MeshStandardMaterial({ color: 0xf5f8fc, roughness: 0.6, flatShading: true });
-
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 3.2, 5), trunkMat);
-    trunk.position.y = 1.6;
-    group.add(trunk);
-
-    for (let i = 0; i < 4; i++) {
-      const radius = 2.4 - i * 0.45;
-      const height = 2.0;
-      const needles = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 6), needleMat);
-      needles.position.y = 2.8 + i * 1.35;
-
-      const snowCap = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.72, height * 0.42, 6), snowMat);
-      snowCap.position.y = 2.8 + i * 1.35 + 0.68;
-
-      group.add(needles, snowCap);
-    }
-
-    const scale = 0.8 + Math.random() * 0.5;
-    group.scale.set(scale, scale, scale);
-    return group;
-  }
-
-  createRockMesh(isBig = false) {
-    const radius = isBig ? (3.8 + Math.random() * 2.8) : (1.4 + Math.random() * 1.2);
-    const geo = new THREE.DodecahedronGeometry(radius, 0);
-    const rockColor = this.data.envType === 'DESERT' ? 0x9e6a45 : (this.data.envType === 'TROPICAL' ? 0x55606d : 0x777788);
-    const mat = new THREE.MeshStandardMaterial({ color: rockColor, roughness: 0.9, flatShading: true });
-    const rock = new THREE.Mesh(geo, mat);
-    rock.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    return rock;
-  }
-
-  createSignMesh(direction = 'RIGHT') {
-    const group = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3.2), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
-    pole.position.y = 1.6;
-
-    const boardCanvas = document.createElement('canvas');
-    boardCanvas.width = 128;
-    boardCanvas.height = 64;
-    const ctx = boardCanvas.getContext('2d');
-
-    // High-visibility retro arcade chevron board
-    ctx.fillStyle = '#e6004c';
-    ctx.fillRect(0, 0, 128, 64);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, 124, 60);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 42px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(direction === 'RIGHT' ? '>>>' : '<<<', 64, 34);
-
-    const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.4, 1.3),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(boardCanvas), side: THREE.DoubleSide })
-    );
-    board.position.y = 2.4;
-
-    group.add(pole, board);
-    return group;
-  }
-
   buildCornerSigns() {
     const samples = (this.data.mapLayout === 'OVAL') ? 320 : 360;
-    const minSpacingDist = 20.0; // Distance between chevron boards along a bend
+    const minSpacingDist = 20.0;
     const minSpacingT = minSpacingDist / this.totalLength;
     const dt = 0.007;
     let lastSignT = -999;
 
     for (let i = 0; i < samples; i++) {
       const t = i / samples;
-
-      // Skip start/finish and pit lane straights
       if (t > 0.0 && t < 0.09) continue;
       if (t > 0.98) continue;
-
       if (Math.abs(t - lastSignT) < minSpacingT) continue;
 
       const tPrev = ((t - dt) % 1.0 + 1.0) % 1.0;
@@ -925,21 +499,17 @@ class Track {
       const deltaTan = tanNext.sub(tanPrev);
       const turnVal = deltaTan.dot(roadInfo.normal);
 
-      // Only trigger where track curvature indicates an active bend
       if (Math.abs(turnVal) < 0.035) continue;
 
       const isRightTurn = turnVal > 0;
-      // Arrow points in direction of turn: 'RIGHT' (>>>) or 'LEFT' (<<<)
       const signDirection = isRightTurn ? 'RIGHT' : 'LEFT';
-      // Outside of right turn is driver's left (-1); outside of left turn is driver's right (+1)
       const outerSide = isRightTurn ? -1 : 1;
 
-      const sign = this.createSignMesh(signDirection);
+      const sign = window.ATR.TrackProps.createCornerSign(signDirection);
       const signOffset = (this.roadWidth * 0.5) + this.shoulderWidth + 1.2;
       const roadUp = new THREE.Vector3().crossVectors(roadInfo.normal, roadInfo.tangent).normalize();
       const signForward = roadInfo.tangent.clone().negate();
 
-      // Orient sign upright to track banking and facing oncoming traffic
       const basisMatrix = new THREE.Matrix4().makeBasis(roadInfo.normal, roadUp, signForward);
       sign.quaternion.setFromRotationMatrix(basisMatrix);
 
@@ -953,62 +523,8 @@ class Track {
     }
   }
 
-  createLogMesh(length = 6.8) {
-    const group = new THREE.Group();
-    const barkMat = new THREE.MeshStandardMaterial({ color: 0x3e2312, roughness: 0.9, flatShading: true });
-    const endMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.7 });
-
-    const radius = 0.46;
-    const trunkGeo = new THREE.CylinderGeometry(radius, radius, length, 10);
-    trunkGeo.rotateZ(Math.PI / 2);
-    const trunk = new THREE.Mesh(trunkGeo, barkMat);
-    group.add(trunk);
-
-    const capGeo = new THREE.CircleGeometry(radius, 10);
-    const capL = new THREE.Mesh(capGeo, endMat);
-    capL.rotation.y = -Math.PI / 2;
-    capL.position.x = -length * 0.5;
-
-    const capR = new THREE.Mesh(capGeo, endMat);
-    capR.rotation.y = Math.PI / 2;
-    capR.position.x = length * 0.5;
-    group.add(capL, capR);
-
-    const branch = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.16, 0.7, 5),
-      barkMat
-    );
-    branch.position.set(length * 0.15, radius + 0.25, 0);
-    branch.rotation.z = 0.35;
-    group.add(branch);
-
-    return group;
-  }
-
-  createRoadRockObstacle(width = 6.2) {
-    const group = new THREE.Group();
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x696c73, roughness: 0.9, flatShading: true });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x484a50, roughness: 0.95, flatShading: true });
-
-    const numRocks = 4;
-    for (let i = 0; i < numRocks; i++) {
-      const radius = 0.75 + Math.random() * 0.55;
-      const rockGeo = new THREE.DodecahedronGeometry(radius, 0);
-      const mesh = new THREE.Mesh(rockGeo, i % 2 === 0 ? rockMat : darkMat);
-
-      const x = (i / (numRocks - 1) - 0.5) * (width * 0.72) + (Math.random() - 0.5) * 0.5;
-      const z = (Math.random() - 0.5) * 0.7;
-      mesh.position.set(x, radius * 0.7, z);
-      mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-      group.add(mesh);
-    }
-    return group;
-  }
-
   buildObstacles() {
-    if (this.data.mapLayout === 'OVAL') {
-      return;
-    }
+    if (this.data.mapLayout === 'OVAL') return;
 
     const minLogSpacingMeters = this.roadWidth * 2.4;
     const minSpacingT = minLogSpacingMeters / this.totalLength;
@@ -1025,7 +541,6 @@ class Track {
         const secondSide = -firstSide;
 
         this.spawnHalfRoadObstacle('LOG', currentT, firstSide);
-
         const chicaneGapMeters = this.roadWidth * (2.2 + Math.random() * 0.8);
         currentT += chicaneGapMeters / this.totalLength;
 
@@ -1054,6 +569,7 @@ class Track {
         this.obstacles.push({
           type: 'OIL',
           t: currentT,
+          distance: currentT * this.totalLength,
           side: 0,
           position: oilPos,
           radius: 2.0
@@ -1069,12 +585,9 @@ class Track {
     const halfRoadCenter = side * (this.roadWidth * 0.25);
     const obsPos = tInfo.center.clone().addScaledVector(tInfo.normal, halfRoadCenter);
 
-    let mesh;
-    if (type === 'LOG') {
-      mesh = this.createLogMesh(this.roadWidth * 0.48);
-    } else {
-      mesh = this.createRoadRockObstacle(this.roadWidth * 0.46);
-    }
+    let mesh = type === 'LOG'
+      ? window.ATR.TrackProps.createLog(this.roadWidth * 0.48)
+      : window.ATR.TrackProps.createRoadRockCluster(this.roadWidth * 0.46);
 
     const roadUp = new THREE.Vector3().crossVectors(tInfo.normal, tInfo.tangent).normalize();
     const forward = tInfo.tangent.clone().negate();
@@ -1087,6 +600,7 @@ class Track {
     this.obstacles.push({
       type,
       t,
+      distance: t * this.totalLength,
       side,
       position: obsPos,
       radius: this.roadWidth * 0.26
@@ -1101,8 +615,6 @@ class Track {
     const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
     let bankAngle = 0;
-
-    // Banking is strictly applied to the NASCAR OVAL superspeedway
     if (this.data.mapLayout === 'OVAL') {
       const turnDeflection = Math.abs(tangent.x);
       const p = Math.min(1.0, Math.max(0.0, (turnDeflection - 0.04) / 0.66));
@@ -1119,5 +631,4 @@ class Track {
   }
 }
 
-window.ATR.TrackGenerator = TrackGenerator;
 window.ATR.Track = Track;

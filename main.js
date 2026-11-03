@@ -3,7 +3,8 @@
    Handles Three.js rendering, horizontal split-screen,
    responsive scaling, mobile controls, FPS counter,
    pitstop service (fuel, damage, tires), procedural
-   cloud system updates, pause states, and HUD states.
+   cloud system updates, pause states, HUD states,
+   and infinite Lotus Highway tactical radar & chunk cycles.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -22,17 +23,14 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-    // Pixel resolution controller (0.25 = 1/4 native res for retro pixel look)
     this.pixelController = new window.ATR.PixelResolutionController(this.renderer, this.canvas, 0.25);
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0c18);
 
-    // Perspective Cameras sized to browser window
     this.cameraP1 = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 2000);
     this.cameraP2 = new THREE.PerspectiveCamera(70, window.innerWidth / (window.innerHeight / 2), 0.5, 2000);
 
-    // Dynamic Lighting
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 1.2);
     hemiLight.position.set(0, 50, 0);
     const sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -50,7 +48,6 @@ class Game {
     this.counterClockwise = false;
     this.clock = new THREE.Clock();
 
-    // FPS Counter variables
     this.fpsElement = document.getElementById('fps-counter');
     this.frameCount = 0;
     this.lastFpsTime = performance.now();
@@ -67,7 +64,6 @@ class Game {
     this.shakeIntensity = 0;
     this.smokeSystem = null;
 
-    // Minimap references
     this.minimapCanvas = document.getElementById('minimap-canvas');
     if (this.minimapCanvas) {
       this.minimapCanvas.width = 560;
@@ -77,7 +73,6 @@ class Game {
     this.minimapBounds = null;
     this.minimapTrackPoints = null;
 
-    // Menu Showcase Car
     this.showcaseCar = window.ATR.CarModelFactory.createWedgeCar(0xff0044, true);
     this.showcaseCar.position.set(0, 0, -6);
     this.scene.add(this.showcaseCar);
@@ -140,7 +135,6 @@ class Game {
 
   setupInputs() {
     window.addEventListener('keydown', e => {
-      // Pause toggle with P or Escape key
       if (e.code === 'KeyP' || e.code === 'Escape') {
         if (this.state === 'RACING' || this.state === 'COUNTDOWN') {
           this.pauseGame();
@@ -209,7 +203,6 @@ class Game {
     window.addEventListener('fullscreenchange', onResize);
     window.addEventListener('webkitfullscreenchange', onResize);
 
-    // Pause when window/tab loses focus
     window.addEventListener('blur', () => {
       this.pauseGame();
     });
@@ -267,7 +260,6 @@ class Game {
       });
     }
 
-    // --- PIXEL MODE TOGGLE BINDINGS ---
     const devPixelCheck = document.getElementById('dev-pixel-mode');
     const optPixelCheck = document.getElementById('opt-pixel-mode');
 
@@ -279,14 +271,9 @@ class Game {
       if (optPixelCheck) optPixelCheck.checked = enabled;
     };
 
-    if (devPixelCheck) {
-      devPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
-    }
-    if (optPixelCheck) {
-      optPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
-    }
+    if (devPixelCheck) devPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
+    if (optPixelCheck) optPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
 
-    // --- DEV MENU CONTROLS ---
     window.ATR.devSettings = {
       obstacleDamage: true,
       infiniteArmor: false,
@@ -467,6 +454,20 @@ class Game {
     const updateMapSelection = () => {
       this.mapLayout = mapSelect ? mapSelect.value : 'ORIGINAL';
 
+      const lapsRow = document.getElementById('menu-laps-row') || menuLapsSelect?.closest('.menu-config-row');
+      const ccwRow = document.getElementById('menu-ccw-row') || ccwCheckbox?.closest('.menu-config-row');
+
+      if (this.mapLayout === 'LOTUS') {
+        if (envRow) envRow.classList.add('hidden');
+        if (lapsRow) lapsRow.classList.add('hidden');
+        if (ccwRow) ccwRow.classList.add('hidden');
+        this.envType = 'FOREST';
+        return;
+      } else {
+        if (lapsRow) lapsRow.classList.remove('hidden');
+        if (ccwRow) ccwRow.classList.remove('hidden');
+      }
+
       if (ccwLabel) {
         ccwLabel.innerText = this.mapLayout === 'OVAL' ? 'REVERSED:' : 'COUNTER-CLOCKWISE:';
       }
@@ -563,13 +564,20 @@ class Game {
   spawnAICars(count) {
     if (!this.track) return;
     const currentAiCount = this.aiCars.length;
-    const refT = this.player1 ? this.player1.trackT : 0.04;
+    const isLotus = (this.mapLayout === 'LOTUS' || this.track.isInfinite);
+    const refT = this.player1 ? this.player1.trackT : (isLotus ? 25.0 : 0.04);
 
     for (let i = 0; i < count; i++) {
       const idx = currentAiCount + i;
       const lane = (idx % 2 === 0 ? 0.35 : -0.35) + (Math.random() - 0.5) * 0.25;
-      const offset = (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * 0.012;
-      const startT = ((refT + offset) % 1.0 + 1.0) % 1.0;
+
+      let startT;
+      if (isLotus) {
+        startT = refT + 30.0 + (i + 1) * 16.0;
+      } else {
+        const offset = (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * 0.012;
+        startT = ((refT + offset) % 1.0 + 1.0) % 1.0;
+      }
 
       const name = window.ATR.AMIGA_NAMES[idx % window.ATR.AMIGA_NAMES.length] +
                    (idx >= window.ATR.AMIGA_NAMES.length ? ` #${Math.floor(idx / window.ATR.AMIGA_NAMES.length) + 1}` : '');
@@ -620,13 +628,16 @@ class Game {
     document.getElementById('minimap-container').classList.remove('hidden');
 
     if (this.track) {
+      if (typeof this.track.dispose === 'function') {
+        this.track.dispose();
+      }
       if (this.track.clouds && typeof this.track.clouds.dispose === 'function') {
         this.track.clouds.dispose();
       }
-      this.scene.remove(this.track.roadMesh);
-      this.scene.remove(this.track.shoulderMesh);
-      this.scene.remove(this.track.terrainMesh);
-      this.scene.remove(this.track.sceneryGroup);
+      if (this.track.roadMesh) this.scene.remove(this.track.roadMesh);
+      if (this.track.shoulderMesh) this.scene.remove(this.track.shoulderMesh);
+      if (this.track.terrainMesh) this.scene.remove(this.track.terrainMesh);
+      if (this.track.sceneryGroup) this.scene.remove(this.track.sceneryGroup);
     }
     this.allCars.forEach(c => this.scene.remove(c.mesh));
     this.allCars = [];
@@ -644,13 +655,16 @@ class Game {
     this.track = new window.ATR.Track(this.scene, trackData);
     this.initMinimapTrack();
 
+    const isLotus = (this.mapLayout === 'LOTUS' || this.track.isInfinite);
+    const pStartT = isLotus ? 25.0 : 0.04;
+
     // Player 1
     this.player1 = new window.ATR.Car(this.scene, {
       name: 'PLAYER 1',
       isPlayer: true,
       playerNum: 1,
       color: 0xe62222,
-      startT: 0.04,
+      startT: pStartT,
       laneOffset: isSplit ? -0.35 : -0.2
     });
     this.allCars.push(this.player1);
@@ -662,7 +676,7 @@ class Game {
         isPlayer: true,
         playerNum: 2,
         color: 0x00bfff,
-        startT: 0.04,
+        startT: pStartT,
         laneOffset: 0.35
       });
       this.allCars.push(this.player2);
@@ -679,7 +693,7 @@ class Game {
     for (let i = 0; i < aiCount; i++) {
       const row = Math.floor(i / 2) + 1;
       const lane = (i % 2 === 0 ? 0.35 : -0.35);
-      const startT = (0.04 - row * 0.007 + 1.0) % 1.0;
+      const startT = isLotus ? (pStartT + row * 18.0) : ((0.04 - row * 0.007 + 1.0) % 1.0);
       const name = window.ATR.AMIGA_NAMES[i % window.ATR.AMIGA_NAMES.length] +
                    (i >= window.ATR.AMIGA_NAMES.length ? ` #${Math.floor(i / window.ATR.AMIGA_NAMES.length) + 1}` : '');
       const color = window.ATR.AI_PALETTE[i % window.ATR.AI_PALETTE.length];
@@ -713,7 +727,9 @@ class Game {
     const roadInfo = this.track.getRoadTransformAt(car.trackT);
     const camOffset = roadInfo.tangent.clone().multiplyScalar(-9.5).add(new THREE.Vector3(0, 3.4, 0));
     camera.position.copy(car.mesh.position).add(camOffset);
-    camera.lookAt(car.mesh.position.clone().add(roadInfo.tangent.clone().multiplyScalar(15)).add(new THREE.Vector3(0, 1.2, 0)));
+    const lookTarget = car.mesh.position.clone().add(roadInfo.tangent.clone().multiplyScalar(15)).add(new THREE.Vector3(0, 1.2, 0));
+    camera.lookAt(lookTarget);
+    camera.userData.lookTarget = lookTarget.clone();
   }
 
   runCountdown() {
@@ -898,9 +914,31 @@ class Game {
       this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 1.5);
     }
 
-    camera.position.lerp(targetCamPos, 0.2);
+    const isLotus = !!(this.track && this.track.isInfinite);
     const lookTarget = car.mesh.position.clone().add(roadInfo.tangent.clone().multiplyScalar(15)).add(new THREE.Vector3(0, 1.2, 0));
-    camera.lookAt(lookTarget);
+
+    if (isLotus) {
+      // Responsive horizontal tracking
+      const horizLerp = 1.0 - Math.exp(-14.0 * delta);
+      camera.position.x += (targetCamPos.x - camera.position.x) * horizLerp;
+      camera.position.z += (targetCamPos.z - camera.position.z) * horizLerp;
+
+      // Soft vertical dampening to absorb rapid road cresting/dips
+      const vertLerp = 1.0 - Math.exp(-3.5 * delta);
+      camera.position.y += (targetCamPos.y - camera.position.y) * vertLerp;
+
+      if (!camera.userData.lookTarget) {
+        camera.userData.lookTarget = lookTarget.clone();
+      } else {
+        camera.userData.lookTarget.x += (lookTarget.x - camera.userData.lookTarget.x) * horizLerp;
+        camera.userData.lookTarget.z += (lookTarget.z - camera.userData.lookTarget.z) * horizLerp;
+        camera.userData.lookTarget.y += (lookTarget.y - camera.userData.lookTarget.y) * vertLerp;
+      }
+      camera.lookAt(camera.userData.lookTarget);
+    } else {
+      camera.position.lerp(targetCamPos, 0.2);
+      camera.lookAt(lookTarget);
+    }
 
     const speedRatio = car.speed / car.maxSpeed;
 
@@ -939,7 +977,18 @@ class Game {
     if (posEl) posEl.innerText = `${rank.toString().padStart(2, '0')}/${this.allCars.length.toString().padStart(2, '0')}`;
 
     const lapEl = document.getElementById(`${hudPrefix}-lap`);
-    if (lapEl) lapEl.innerText = `${Math.min(player.lap, this.totalLaps)}/${this.totalLaps}`;
+    const lapLabel = document.getElementById(`${hudPrefix}-lap-label`);
+    if (lapEl) {
+      if (this.track && this.track.isInfinite) {
+        if (lapLabel) lapLabel.innerText = 'STAGE';
+        const stageNum = Math.floor((player.trackT || 0) / 1500) + 1;
+        const distKm = ((player.trackT || 0) / 1000).toFixed(1);
+        lapEl.innerText = `${stageNum} (${distKm}k)`;
+      } else {
+        if (lapLabel) lapLabel.innerText = 'LAP';
+        lapEl.innerText = `${Math.min(player.lap, this.totalLaps)}/${this.totalLaps}`;
+      }
+    }
 
     const timeEl = document.getElementById(`${hudPrefix}-time`);
     if (timeEl) {
@@ -967,7 +1016,7 @@ class Game {
     const turboBar = document.getElementById(`${hudPrefix}-turbo-bar`);
     if (turboBar) turboBar.style.width = `${player.turbo}%`;
 
-    if (player.lap > this.totalLaps && !player.finished) {
+    if (!this.track.isInfinite && player.lap > this.totalLaps && !player.finished) {
       player.finished = true;
       if (this.state === 'RACING') {
         this.finishRace();
@@ -976,7 +1025,11 @@ class Game {
   }
 
   initMinimapTrack() {
-    if (!this.track || !this.track.spline) return;
+    if (!this.track || !this.track.spline) {
+      this.minimapTrackPoints = null;
+      this.minimapBounds = null;
+      return;
+    }
     const samples = 140;
     const pts = [];
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -995,7 +1048,119 @@ class Game {
   }
 
   updateMinimap() {
-    if (!this.minimapCtx || !this.minimapBounds || !this.minimapTrackPoints) return;
+    if (!this.minimapCtx) return;
+
+    // Lotus Endless Highway Tactical Radar Scanner
+    if (this.track && this.track.isInfinite && this.player1) {
+      const ctx = this.minimapCtx;
+      const w = this.minimapCanvas.width;
+      const h = this.minimapCanvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const pS = this.player1.trackT;
+      const pInfo = this.track.getRoadTransformAt(pS);
+      const pCenter = pInfo.center;
+
+      // Calculate player's forward and right vectors on the ground plane (XZ)
+      const fwdLen = Math.hypot(pInfo.tangent.x, pInfo.tangent.z) || 1;
+      const dirFwdX = pInfo.tangent.x / fwdLen;
+      const dirFwdZ = pInfo.tangent.z / fwdLen;
+      const dirRightX = -dirFwdZ;
+      const dirRightZ = dirFwdX;
+
+      const originX = w * 0.5;
+      const originY = h * 0.82;
+      const scale = 1.15; // Pixels per meter
+
+      // Helper to project any 3D world position into player-relative radar screen space
+      const toRadar = (wx, wz) => {
+        const dx = wx - pCenter.x;
+        const dz = wz - pCenter.z;
+        const forwardDist = dx * dirFwdX + dz * dirFwdZ;
+        const rightDist = dx * dirRightX + dz * dirRightZ;
+        return {
+          x: originX + rightDist * scale,
+          y: originY - forwardDist * scale,
+          forwardDist,
+          rightDist
+        };
+      };
+
+      // 1. Draw Road Ribbon & Curbs
+      const samples = [];
+      for (let step = -45; step <= 360; step += 12) {
+        const info = this.track.getRoadTransformAt(pS + step);
+        samples.push(toRadar(info.center.x, info.center.z));
+      }
+
+      // Outer Road Bed
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        if (i === 0) ctx.moveTo(samples[i].x, samples[i].y);
+        else ctx.lineTo(samples[i].x, samples[i].y);
+      }
+      ctx.strokeStyle = 'rgba(28, 36, 52, 0.9)';
+      ctx.lineWidth = 22;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // Road Surface Ribbon
+      ctx.strokeStyle = 'rgba(70, 160, 240, 0.85)';
+      ctx.lineWidth = 14;
+      ctx.stroke();
+
+      // Center Dash Guide
+      ctx.strokeStyle = 'rgba(255, 230, 0, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 2. Pit Stop Indicator (if approaching service oasis)
+      if (this.track.pitZone) {
+        const pitDist = this.track.pitZone.distance - pS;
+        if (pitDist > -40 && pitDist < 360) {
+          const pitPos = toRadar(this.track.pitZone.center.x, this.track.pitZone.center.z);
+          ctx.fillStyle = '#00ff66';
+          ctx.beginPath();
+          ctx.arc(pitPos.x, pitPos.y, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      // 3. Draw AI & Opponent Cars (accurately placed along the curved route)
+      for (let car of this.allCars) {
+        if (car === this.player1) continue;
+
+        const carPos = toRadar(car.mesh.position.x, car.mesh.position.z);
+        if (carPos.forwardDist >= -50 && carPos.forwardDist <= 365) {
+          ctx.fillStyle = car.isPlayer ? '#00c3ff' : '#ffe600';
+          ctx.beginPath();
+          ctx.arc(carPos.x, carPos.y, 6.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+
+      // 4. Draw Player 1 (Radar Origin)
+      ctx.fillStyle = '#ff2244';
+      ctx.beginPath();
+      ctx.arc(originX, originY, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      return;
+    }
+
+    if (!this.minimapBounds || !this.minimapTrackPoints) return;
     const ctx = this.minimapCtx;
     const w = this.minimapCanvas.width;
     const h = this.minimapCanvas.height;
@@ -1113,8 +1278,18 @@ class Game {
       this.smokeSystem.clear();
     }
 
-    if (this.track && this.track.clouds && typeof this.track.clouds.dispose === 'function') {
-      this.track.clouds.dispose();
+    if (this.track) {
+      if (typeof this.track.dispose === 'function') {
+        this.track.dispose();
+      }
+      if (this.track.clouds && typeof this.track.clouds.dispose === 'function') {
+        this.track.clouds.dispose();
+      }
+      if (this.track.roadMesh) this.scene.remove(this.track.roadMesh);
+      if (this.track.shoulderMesh) this.scene.remove(this.track.shoulderMesh);
+      if (this.track.terrainMesh) this.scene.remove(this.track.terrainMesh);
+      if (this.track.sceneryGroup) this.scene.remove(this.track.sceneryGroup);
+      this.track = null;
     }
 
     this.allCars.forEach(c => this.scene.remove(c.mesh));
@@ -1144,6 +1319,11 @@ class Game {
     // Update procedural clouds across all active tracks
     if (this.track && this.track.clouds && typeof this.track.clouds.update === 'function') {
       this.track.clouds.update(delta);
+    }
+
+    // Update infinite Lotus Highway procedural generation & chunk recycling
+    if (this.track && this.track.isInfinite) {
+      this.track.update(this.player1, this.allCars, delta);
     }
 
     if (this.state === 'MENU') {

@@ -3,6 +3,7 @@
    Constructs 1990s wedge-shaped supercars with pop-up
    headlights, spoilers, shadows, arcade physics, damage,
    tire wear, and pit repairs supporting players & AI.
+   Fully supports standard circuits and infinite tracks.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -225,7 +226,7 @@ class Car {
     this.lap = 1;
     this.checkpointIndex = 0;
     this.finished = false;
-    this.totalRaceDistance = 0;
+    this.totalRaceDistance = options.startT || 0;
 
     // Lap timing
     this.currentLapTime = 0;
@@ -272,6 +273,7 @@ class Car {
     const eligibleSet = new Set();
     const activeTrack = track || game.track;
     const trackLen = activeTrack?.totalLength || 1000;
+    const isInf = !!activeTrack?.isInfinite;
 
     const players = [];
     if (game.player1) players.push(game.player1);
@@ -285,19 +287,22 @@ class Car {
         const car = game.allCars[i];
         if (car.isPlayer || car === player) continue;
 
-        let dt = car.trackT - player.trackT;
-        if (dt < -0.5) dt += 1.0;
-        if (dt > 0.5) dt -= 1.0;
+        let distAhead = 0;
+        if (isInf) {
+          distAhead = car.trackT - player.trackT;
+        } else {
+          let dt = car.trackT - player.trackT;
+          if (dt < -0.5) dt += 1.0;
+          if (dt > 0.5) dt -= 1.0;
+          distAhead = dt * trackLen;
+        }
 
-        const distAhead = dt * trackLen;
-        // Check only cars that are actually in front of the player along the track
         if (distAhead > 0 && distAhead < 140) {
           const distSq = car.mesh.position.distanceToSquared(player.mesh.position);
           candidates.push({ car, distSq });
         }
       }
 
-      // Pick up to the 5 closest cars in front of the player
       candidates.sort((a, b) => a.distSq - b.distSq);
       const limit = Math.min(candidates.length, 5);
       for (let i = 0; i < limit; i++) {
@@ -339,18 +344,17 @@ class Car {
       this.mesh.rotation.y += delta * 15.0;
     }
 
-    // Only slow down on oval tracks when tires actually touch the red/white edges
     const isOval = track?.data?.mapLayout === 'OVAL';
     const edgeThreshold = isOval ? 0.98 : 0.88;
     this.offRoad = Math.abs(this.laneOffset) > edgeThreshold;
     if (this.offRoad && !this.airborne) {
-      this.speed *= (1.0 - 1.6 * delta); // Edge/shoulder drag
+      this.speed *= (1.0 - 1.6 * delta);
     }
 
     this.speed *= Math.pow(this.drag, delta * 60);
     if (this.speed < 0) this.speed = 0;
 
-    // DEV: Infinite Armor (God Mode), Infinite Tires, and Infinite Fuel
+    // DEV: Infinite Armor, Infinite Tires, and Infinite Fuel
     if (this.isPlayer) {
       if (window.ATR?.devSettings?.infiniteArmor) {
         this.health = 100.0;
@@ -363,12 +367,12 @@ class Car {
       }
     }
 
-    // Critical Damage penalty (Engine limp-home mode if Armor is 0)
+    // Critical Damage penalty
     if (this.health <= 0) {
       this.speed = Math.min(this.speed, 38.0);
     }
 
-    // Tire Wear Physics: Degrades faster with speed, cornering yaw, and drifting
+    // Tire Wear Physics
     if (this.speed > 8 && !(this.isPlayer && window.ATR?.devSettings?.infiniteTires)) {
       const turnStress = Math.abs(this.steerYaw || 0) * 1.8;
       const driftStress = (this.slipTime > 0) ? 2.5 : 0;
@@ -376,7 +380,7 @@ class Car {
       this.tires = Math.max(0, this.tires - wearRate * delta);
     }
 
-    // Degraded tire grip penalty on acceleration and top speed
+    // Degraded tire grip penalty
     if (this.tires < 20) {
       const gripRatio = Math.max(0.4, this.tires / 20);
       this.speed *= (1.0 - 0.25 * (1.0 - gripRatio) * delta);
@@ -387,7 +391,7 @@ class Car {
       this.turbo = 100.0;
     }
 
-    // Turbo boost allows exceeding standard top speed
+    // Turbo boost
     if (this.isTurboActive && this.turbo > 0) {
       if (!this.isPlayer || !window.ATR?.devSettings?.infiniteTurbo) {
         this.turbo -= 24 * delta;
@@ -403,12 +407,18 @@ class Car {
       if (this.fuel <= 0) this.speed *= 0.96;
     }
 
-    // Advance position along spline
+    // Advance position along track (linear distance for infinite, cyclical for circuits)
     const distanceDelta = (this.speed / 3.6) * delta;
     this.totalRaceDistance += distanceDelta;
-    this.trackT = ((this.trackT + (distanceDelta / track.totalLength)) % 1.0 + 1.0) % 1.0;
 
-    // Road alignment with full 3D corner banking tilt
+    if (track && track.isInfinite) {
+      this.trackT = this.totalRaceDistance;
+    } else {
+      const tLen = track ? track.totalLength : 1000;
+      this.trackT = ((this.trackT + (distanceDelta / tLen)) % 1.0 + 1.0) % 1.0;
+    }
+
+    // Road alignment with 3D corner banking
     const roadInfo = track.getRoadTransformAt(this.trackT);
     const roadHalfWidth = track.roadWidth * 0.46;
     const worldPos = roadInfo.center.clone().addScaledVector(roadInfo.normal, this.laneOffset * roadHalfWidth);
@@ -442,7 +452,6 @@ class Car {
   updateSmoke(delta, roadInfo, track) {
     if (!window.ATR.smokeSystem) return;
 
-    // Only show smoke effects from the 5 closest cars in front of the player
     if (!this.isPlayer) {
       const eligible = Car.getEligibleSmokeCars(track);
       if (!eligible || !eligible.has(this)) return;
@@ -574,6 +583,24 @@ class Car {
   }
 
   updateLapCheckpoints(track) {
+    if (track && track.isInfinite) {
+      // In infinite mode, stage milestone checks every 1500m
+      const stage = Math.floor(this.totalRaceDistance / 1500.0) + 1;
+      if (stage !== this.lap) {
+        this.lap = stage;
+        if (this.currentLapTime > 0) {
+          this.lastLapTime = this.currentLapTime;
+          if (!this.bestLapTime || this.currentLapTime < this.bestLapTime) {
+            this.bestLapTime = this.currentLapTime;
+          }
+          this.currentLapTime = 0;
+        }
+      }
+      return;
+    }
+
+    if (!track || !track.checkpoints || track.checkpoints.length === 0) return;
+
     const cpCount = track.checkpoints.length;
     const nextCpIdx = (this.checkpointIndex + 1) % cpCount;
     const nextCp = track.checkpoints[nextCpIdx];
@@ -677,27 +704,30 @@ class AIController {
     let inServiceBay = false;
 
     if (track && track.pitZone) {
-      let dt = car.trackT - track.pitZone.tStart;
-      if (dt < -0.5) dt += 1.0;
-      if (dt > 0.5) dt -= 1.0;
-      const zoneLen = track.pitZone.tEnd - track.pitZone.tStart;
-      inPitZone = (dt >= -0.01 && dt <= zoneLen + 0.01);
-
-      const distToBay = car.mesh.position.distanceTo(track.pitZone.center);
-      inServiceBay = distToBay < 14.0;
+      if (track.isInfinite) {
+        const distToPit = Math.abs(car.trackT - track.pitZone.distance);
+        inPitZone = distToPit < 55.0;
+        const distToBay = car.mesh.position.distanceTo(track.pitZone.center);
+        inServiceBay = distToBay < 14.0;
+      } else {
+        let dt = car.trackT - track.pitZone.tStart;
+        if (dt < -0.5) dt += 1.0;
+        if (dt > 0.5) dt -= 1.0;
+        const zoneLen = track.pitZone.tEnd - track.pitZone.tStart;
+        inPitZone = (dt >= -0.01 && dt <= zoneLen + 0.01);
+        const distToBay = car.mesh.position.distanceTo(track.pitZone.center);
+        inServiceBay = distToBay < 14.0;
+      }
     }
 
     if (inPitZone && (needsService || inServiceBay)) {
-      // Steer toward roadside service bay
       this.targetLane = 0.88;
 
       if (inServiceBay) {
         if (needsService) {
-          // Brake to full stop
           car.brake(delta * 2.2);
           car.speed = Math.max(0, car.speed - 90.0 * delta);
 
-          // Pit servicing repairs
           car.fuel = Math.min(100, car.fuel + 45 * delta);
           car.health = Math.min(100, car.health + 40 * delta);
           car.tires = Math.min(100, car.tires + 50 * delta);
@@ -706,7 +736,6 @@ class AIController {
             window.ATR.Audio.playRepair();
           }
         } else {
-          // Servicing complete, rejoin race
           car.accelerate(delta);
           this.targetLane = 0.1;
         }
@@ -737,10 +766,15 @@ class AIController {
     let isAvoidingObstacle = false;
     if (this.track && this.track.obstacles) {
       for (let obs of this.track.obstacles) {
-        let dt = obs.t - car.trackT;
-        if (dt < -0.5) dt += 1.0;
-        if (dt > 0.5) dt -= 1.0;
-        const distAhead = dt * this.track.totalLength;
+        let distAhead = 0;
+        if (track.isInfinite) {
+          distAhead = (obs.distance !== undefined ? obs.distance : obs.t) - car.trackT;
+        } else {
+          let dt = obs.t - car.trackT;
+          if (dt < -0.5) dt += 1.0;
+          if (dt > 0.5) dt -= 1.0;
+          distAhead = dt * this.track.totalLength;
+        }
 
         if (distAhead > 4.0 && distAhead < 65.0) {
           isAvoidingObstacle = true;
@@ -769,10 +803,15 @@ class AIController {
       for (let other of allCars) {
         if (other === car) continue;
 
-        let dt = other.trackT - car.trackT;
-        if (dt < -0.5) dt += 1.0;
-        if (dt > 0.5) dt -= 1.0;
-        const distAhead = dt * this.track.totalLength;
+        let distAhead = 0;
+        if (track.isInfinite) {
+          distAhead = other.trackT - car.trackT;
+        } else {
+          let dt = other.trackT - car.trackT;
+          if (dt < -0.5) dt += 1.0;
+          if (dt > 0.5) dt -= 1.0;
+          distAhead = dt * this.track.totalLength;
+        }
 
         if (distAhead > 0.5 && distAhead < 24.0) {
           const laneDiff = other.laneOffset - car.laneOffset;

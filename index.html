@@ -91,7 +91,7 @@
               <span id="p1-pos" class="hud-value neon-yellow">01/20</span>
             </div>
             <div class="hud-box">
-              <span class="hud-label">LAP</span>
+              <span class="hud-label" id="p1-lap-label">LAP</span>
               <span id="p1-lap" class="hud-value neon-white">1/3</span>
             </div>
             <div class="hud-box">
@@ -141,7 +141,7 @@
               <span id="p2-pos" class="hud-value neon-yellow">02/20</span>
             </div>
             <div class="hud-box">
-              <span class="hud-label">LAP</span>
+              <span class="hud-label" id="p2-lap-label">LAP</span>
               <span id="p2-lap" class="hud-value neon-white">1/3</span>
             </div>
             <div class="hud-box">
@@ -182,7 +182,7 @@
           <div id="p2-pit-msg" class="hud-center-msg hidden">STOP FOR PITSTOP</div>
         </div>
 
-        <!-- Minimap (Bottom-Right Corner) -->
+        <!-- Minimap / Radar (Bottom-Right Corner) -->
         <div id="minimap-container" class="hidden">
           <canvas id="minimap-canvas" width="280" height="280"></canvas>
         </div>
@@ -238,6 +238,7 @@
                 <option value="FJORD">FROZEN FJORD (SNOW)</option>
                 <option value="MIDNIGHT">CYBER VALE (NIGHT)</option>
                 <option value="OVAL">DAYTONA SUPERSPEEDWAY (BANKED OVAL)</option>
+                <option value="LOTUS">LOTUS ENDLESS HIGHWAY (NEVER-ENDING)</option>
               </select>
             </div>
 
@@ -255,7 +256,7 @@
             </div>
 
             <!-- Main Menu Lap Selector -->
-            <div class="menu-config-row">
+            <div class="menu-config-row" id="menu-laps-row">
               <label for="menu-laps-select">RACE LAPS:</label>
               <select id="menu-laps-select" class="retro-select">
                 <option value="1">1 Lap (Sprint)</option>
@@ -267,7 +268,7 @@
             </div>
 
             <!-- Counter-Clockwise / Reversed Checkbox Toggle -->
-            <div class="menu-config-row">
+            <div class="menu-config-row" id="menu-ccw-row">
               <label for="menu-counter-clockwise" id="menu-counter-clockwise-label">COUNTER-CLOCKWISE:</label>
               <input type="checkbox" id="menu-counter-clockwise" style="accent-color: #00ffff; width: 18px; height: 18px; cursor: pointer;">
             </div>
@@ -392,7 +393,14 @@
   <script src="audio.js"></script>
   <script src="clouds.js"></script>
   <script src="pixelMode.js"></script>
+  
+  <!-- Modular Track System -->
+  <script src="trackProps.js"></script>
+  <script src="trackGenerator.js"></script>
+  <script src="trackLotus.js"></script>
   <script src="track.js"></script>
+
+  <!-- Vehicles & Main Game Controller -->
   <script src="cars.js"></script>
   <script src="main.js"></script>
 </body>
