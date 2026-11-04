@@ -9,8 +9,8 @@ window.ATR = window.ATR || {};
 
 class Track {
   constructor(scene, trackData) {
-    // If LOTUS endless highway selected, instantiate and return InfiniteLotusTrack
-    if (trackData && (trackData.mapLayout === 'LOTUS' || trackData.isInfinite)) {
+    // If LOTUS or LOTUS_SUPERWIDE endless highway selected, instantiate and return InfiniteLotusTrack
+    if (trackData && (trackData.mapLayout === 'LOTUS' || trackData.mapLayout === 'LOTUS_SUPERWIDE' || trackData.isInfinite)) {
       return new window.ATR.InfiniteLotusTrack(scene, trackData);
     }
 

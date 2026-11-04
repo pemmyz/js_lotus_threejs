@@ -466,7 +466,7 @@ class Game {
       const lapsRow = document.getElementById('menu-laps-row') || menuLapsSelect?.closest('.menu-config-row');
       const ccwRow = document.getElementById('menu-ccw-row') || ccwCheckbox?.closest('.menu-config-row');
 
-      if (this.mapLayout === 'LOTUS') {
+      if (this.mapLayout === 'LOTUS' || this.mapLayout === 'LOTUS_SUPERWIDE') {
         if (envRow) envRow.classList.add('hidden');
         if (lapsRow) lapsRow.classList.add('hidden');
         if (ccwRow) ccwRow.classList.add('hidden');
@@ -573,7 +573,7 @@ class Game {
   spawnAICars(count) {
     if (!this.track) return;
     const currentAiCount = this.aiCars.length;
-    const isLotus = (this.mapLayout === 'LOTUS' || this.track.isInfinite);
+    const isLotus = (this.mapLayout === 'LOTUS' || this.mapLayout === 'LOTUS_SUPERWIDE' || this.track.isInfinite);
     const refT = this.player1 ? this.player1.trackT : (isLotus ? 25.0 : 0.04);
 
     for (let i = 0; i < count; i++) {
@@ -664,7 +664,7 @@ class Game {
     this.track = new window.ATR.Track(this.scene, trackData);
     this.initMinimapTrack();
 
-    const isLotus = (this.mapLayout === 'LOTUS' || this.track.isInfinite);
+    const isLotus = (this.mapLayout === 'LOTUS' || this.mapLayout === 'LOTUS_SUPERWIDE' || this.track.isInfinite);
     const pStartT = isLotus ? 25.0 : 0.04;
 
     // Player 1
@@ -1120,6 +1120,8 @@ class Game {
         samples.push(toRadar(info.center.x, info.center.z));
       }
 
+      const isSuperwide = (this.mapLayout === 'LOTUS_SUPERWIDE' || (this.track && this.track.roadWidth >= 70));
+
       // Outer Road Bed
       ctx.beginPath();
       for (let i = 0; i < samples.length; i++) {
@@ -1127,19 +1129,19 @@ class Game {
         else ctx.lineTo(samples[i].x, samples[i].y);
       }
       ctx.strokeStyle = 'rgba(28, 36, 52, 0.9)';
-      ctx.lineWidth = 22;
+      ctx.lineWidth = isSuperwide ? 58 : 22;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
 
       // Road Surface Ribbon
       ctx.strokeStyle = 'rgba(70, 160, 240, 0.85)';
-      ctx.lineWidth = 14;
+      ctx.lineWidth = isSuperwide ? 42 : 14;
       ctx.stroke();
 
       // Center Dash Guide
       ctx.strokeStyle = 'rgba(255, 230, 0, 0.6)';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = isSuperwide ? 3 : 2;
       ctx.setLineDash([8, 8]);
       ctx.stroke();
       ctx.setLineDash([]);

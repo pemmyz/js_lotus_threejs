@@ -5,6 +5,7 @@
    dynamic chunk generation, continuous biome transitions,
    retro billboards, telegraph poles, periodic pit oases,
    alternating roadside hazards, and active memory disposal.
+   Supports standard width (16m) and superwide (80m, 5x).
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -16,8 +17,10 @@ class InfiniteLotusTrack {
     this.isInfinite = true;
     this.seed = trackData.seed || 849271;
     this.totalLength = 999999999;
-    this.roadWidth = 16.0;
-    this.shoulderWidth = 2.8;
+
+    const isSuperwide = (trackData.mapLayout === 'LOTUS_SUPERWIDE');
+    this.roadWidth = isSuperwide ? 80.0 : 16.0;
+    this.shoulderWidth = isSuperwide ? 6.0 : 2.8;
 
     this.sceneryGroup = new THREE.Group();
     this.roadGroup = new THREE.Group();
@@ -54,11 +57,11 @@ class InfiniteLotusTrack {
 
     if (typeof window.ATR.createCloudSystem === 'function') {
       this.clouds = window.ATR.createCloudSystem({
-        count: 36,
+        count: isSuperwide ? 48 : 36,
         baseAlt: 160,
         minRadius: 40,
-        maxRadius: 750,
-        boundX: 1000
+        maxRadius: isSuperwide ? 950 : 750,
+        boundX: isSuperwide ? 1200 : 1000
       });
       this.sceneryGroup.add(this.clouds.group);
     }
@@ -109,15 +112,31 @@ class InfiniteLotusTrack {
     }
 
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(16, 0, 12, 512);
-    ctx.fillRect(484, 0, 12, 512);
-    for (let y = 20; y < 512; y += 96) ctx.fillRect(250, y, 12, 54);
+    ctx.fillRect(8, 0, 8, 512);
+    ctx.fillRect(496, 0, 8, 512);
 
-    ctx.fillStyle = '#eedd44';
-    for (let y = 10; y < 512; y += 96) {
-      ctx.fillRect(132, y, 6, 48);
-      ctx.fillRect(374, y, 6, 48);
+    if (this.roadWidth >= 70) {
+      // 10-Lane superwide dash dividers
+      ctx.fillStyle = '#ffffff';
+      for (let y = 20; y < 512; y += 96) {
+        ctx.fillRect(252, y, 8, 54);
+      }
+      ctx.fillStyle = '#eedd44';
+      const laneIntervals = [51, 102, 153, 204, 306, 357, 408, 459];
+      for (let lx of laneIntervals) {
+        for (let y = 10; y < 512; y += 96) {
+          ctx.fillRect(lx, y, 4, 48);
+        }
+      }
+    } else {
+      for (let y = 20; y < 512; y += 96) ctx.fillRect(250, y, 12, 54);
+      ctx.fillStyle = '#eedd44';
+      for (let y = 10; y < 512; y += 96) {
+        ctx.fillRect(132, y, 6, 48);
+        ctx.fillRect(374, y, 6, 48);
+      }
     }
+
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(1, 10);
@@ -433,7 +452,7 @@ class InfiniteLotusTrack {
       chunkProps.push(plant);
     }
 
-    // 5. Dynamic Obstacles (Logs, Rocks, Oil Slicks - Alternating sides across highway)
+    // 5. Dynamic Obstacles (Logs, Rocks, Oil Slicks - Alternating across road)
     if (startS > 180.0 && chunkIndex % 2 === 0) {
       const obsS = startS + 37.5;
       const roadInfo = this.getRoadTransformAt(obsS);
@@ -464,7 +483,8 @@ class InfiniteLotusTrack {
         const halfRoadCenter = side * (this.roadWidth * 0.25);
         const obsPos = roadInfo.center.clone().addScaledVector(roadInfo.normal, halfRoadCenter);
 
-        const logMesh = window.ATR.TrackProps.createLog(this.roadWidth * 0.48);
+        const logWidth = Math.min(this.roadWidth * 0.48, 16.0);
+        const logMesh = window.ATR.TrackProps.createLog(logWidth);
         const forward = roadInfo.tangent.clone().negate();
         const basisMatrix = new THREE.Matrix4().makeBasis(roadInfo.normal, roadUp, forward);
         logMesh.quaternion.setFromRotationMatrix(basisMatrix);
@@ -473,7 +493,7 @@ class InfiniteLotusTrack {
         this.sceneryGroup.add(logMesh);
         chunkProps.push(logMesh);
 
-        const obsObj = { type: 'LOG', distance: obsS, t: obsS, side, position: obsPos, radius: this.roadWidth * 0.26 };
+        const obsObj = { type: 'LOG', distance: obsS, t: obsS, side, position: obsPos, radius: logWidth * 0.5 };
         this.obstacles.push(obsObj);
         chunkObstacles.push(obsObj);
 
@@ -483,7 +503,8 @@ class InfiniteLotusTrack {
         const halfRoadCenter = side * (this.roadWidth * 0.25);
         const obsPos = roadInfo.center.clone().addScaledVector(roadInfo.normal, halfRoadCenter);
 
-        const rockMesh = window.ATR.TrackProps.createRoadRockCluster(this.roadWidth * 0.46);
+        const rockWidth = Math.min(this.roadWidth * 0.46, 15.0);
+        const rockMesh = window.ATR.TrackProps.createRoadRockCluster(rockWidth);
         const forward = roadInfo.tangent.clone().negate();
         const basisMatrix = new THREE.Matrix4().makeBasis(roadInfo.normal, roadUp, forward);
         rockMesh.quaternion.setFromRotationMatrix(basisMatrix);
@@ -492,7 +513,7 @@ class InfiniteLotusTrack {
         this.sceneryGroup.add(rockMesh);
         chunkProps.push(rockMesh);
 
-        const obsObj = { type: 'ROCK', distance: obsS, t: obsS, side, position: obsPos, radius: this.roadWidth * 0.26 };
+        const obsObj = { type: 'ROCK', distance: obsS, t: obsS, side, position: obsPos, radius: rockWidth * 0.5 };
         this.obstacles.push(obsObj);
         chunkObstacles.push(obsObj);
       }
@@ -539,7 +560,8 @@ class InfiniteLotusTrack {
   }
 
   buildStartGantry() {
-    const banner = window.ATR.TrackProps.createBanner('LOTUS ENDLESS HIGHWAY', this.roadWidth, '#ff0055');
+    const title = this.roadWidth >= 70 ? 'LOTUS SUPERWIDE HIGHWAY' : 'LOTUS ENDLESS HIGHWAY';
+    const banner = window.ATR.TrackProps.createBanner(title, this.roadWidth, '#ff0055');
     const info = this.getRoadTransformAt(10.0);
     banner.position.copy(info.center);
     banner.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), info.tangent.clone().negate());

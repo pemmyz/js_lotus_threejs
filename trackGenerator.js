@@ -23,14 +23,14 @@ class TrackGenerator {
 
   generate(seed = 849271, difficulty = 'MEDIUM', envType = 'FOREST', numWaypoints = 72, mapLayout = 'ORIGINAL', counterClockwise = false) {
     // =========================================================
-    // 0. LOTUS ENDLESS NEVER-ENDING HIGHWAY
+    // 0. LOTUS ENDLESS NEVER-ENDING HIGHWAY (NORMAL & SUPERWIDE)
     // =========================================================
-    if (mapLayout === 'LOTUS') {
+    if (mapLayout === 'LOTUS' || mapLayout === 'LOTUS_SUPERWIDE') {
       return {
         isInfinite: true,
         seed,
         envType: 'FOREST',
-        mapLayout: 'LOTUS',
+        mapLayout,
         totalLength: 999999999,
         counterClockwise: false
       };
