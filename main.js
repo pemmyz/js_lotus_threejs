@@ -1005,6 +1005,8 @@ class Game {
 
     const lapEl = document.getElementById(`${hudPrefix}-lap`);
     const lapLabel = document.getElementById(`${hudPrefix}-lap-label`);
+    const isInfiniteLaps = this.totalLaps >= 999999;
+
     if (lapEl) {
       if (this.track && this.track.isInfinite) {
         if (lapLabel) lapLabel.innerText = 'STAGE';
@@ -1013,8 +1015,20 @@ class Game {
         lapEl.innerText = `${stageNum} (${distKm}k)`;
       } else {
         if (lapLabel) lapLabel.innerText = 'LAP';
-        lapEl.innerText = `${Math.min(player.lap, this.totalLaps)}/${this.totalLaps}`;
+        lapEl.innerText = isInfiniteLaps ? `${player.lap}/∞` : `${Math.min(player.lap, this.totalLaps)}/${this.totalLaps}`;
       }
+    }
+
+    // Kilometers traveled display for circuits that have the Race Laps option
+    const distBox = document.getElementById(`${hudPrefix}-dist-box`);
+    const distEl = document.getElementById(`${hudPrefix}-dist`);
+    const hasLapsOption = (this.mapLayout !== 'LOTUS' && this.mapLayout !== 'LOTUS_SUPERWIDE');
+    if (distBox) {
+      distBox.classList.toggle('hidden', !hasLapsOption);
+    }
+    if (distEl && hasLapsOption) {
+      const kmTraveled = ((player.totalRaceDistance || 0) / 1000).toFixed(1);
+      distEl.innerText = `${kmTraveled} KM`;
     }
 
     const timeEl = document.getElementById(`${hudPrefix}-time`);
@@ -1043,7 +1057,7 @@ class Game {
     const turboBar = document.getElementById(`${hudPrefix}-turbo-bar`);
     if (turboBar) turboBar.style.width = `${player.turbo}%`;
 
-    if (!this.track.isInfinite && player.lap > this.totalLaps && !player.finished) {
+    if (!this.track.isInfinite && !isInfiniteLaps && player.lap > this.totalLaps && !player.finished) {
       player.finished = true;
       if (this.state === 'RACING') {
         this.finishRace();
