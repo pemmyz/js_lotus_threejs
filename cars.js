@@ -344,8 +344,19 @@ class Car {
       this.mesh.rotation.y += delta * 15.0;
     }
 
+    const roadWidth = track ? track.roadWidth : 16.0;
+    const roadHalfWidth = roadWidth * 0.46; // lateral lane offset reference for car positioning
+    const carOuterTireOffset = 1.15; // lateral distance of outer tire edge from car center
+
+    // Outer edge of asphalt surface in meters from road center
+    const asphaltEdgeMeters = roadWidth * 0.5;
+
+    // The car only touches the red/white shoulder when its outer tire extends past the asphalt edge
+    const curbContactOffset = (asphaltEdgeMeters - carOuterTireOffset) / roadHalfWidth;
+
     const isOval = track?.data?.mapLayout === 'OVAL';
-    const edgeThreshold = isOval ? 0.98 : 0.88;
+    const edgeThreshold = isOval ? 1.05 : curbContactOffset;
+
     this.offRoad = Math.abs(this.laneOffset) > edgeThreshold;
     if (this.offRoad && !this.airborne) {
       this.speed *= (1.0 - 1.6 * delta);
@@ -420,7 +431,6 @@ class Car {
 
     // Road alignment with 3D corner banking
     const roadInfo = track.getRoadTransformAt(this.trackT);
-    const roadHalfWidth = track.roadWidth * 0.46;
     const worldPos = roadInfo.center.clone().addScaledVector(roadInfo.normal, this.laneOffset * roadHalfWidth);
     const roadUp = new THREE.Vector3().crossVectors(roadInfo.normal, roadInfo.tangent).normalize();
 
@@ -626,7 +636,7 @@ class Car {
     const slipFactor = this.slipTime > 0 ? 0.25 : 1.0;
     const tireGrip = this.tires < 50 ? Math.max(0.42, 0.42 + (this.tires / 50) * 0.58) : 1.0;
     this.laneOffset += amount * this.steeringSensitivity * slipFactor * tireGrip * delta;
-    this.laneOffset = Math.max(-1.3, Math.min(1.3, this.laneOffset));
+    this.laneOffset = Math.max(-1.5, Math.min(1.5, this.laneOffset));
     this.steerAngle = amount;
   }
 
