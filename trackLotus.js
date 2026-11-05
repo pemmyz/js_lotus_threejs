@@ -6,6 +6,8 @@
    retro billboards, telegraph poles, periodic pit oases,
    alternating roadside hazards, and active memory disposal.
    Supports standard width (16m) and superwide (80m, 5x).
+   Includes selectable clear trilinear / anisotropic road
+   rendering and classic retro pixel noise surface styles.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -17,6 +19,10 @@ class InfiniteLotusTrack {
     this.isInfinite = true;
     this.seed = trackData.seed || 849271;
     this.totalLength = 999999999;
+
+    this.roadStyle = trackData.roadStyle || window.ATR.roadStyle || 'CLEAR';
+    this.trilinear = trackData.trilinear !== undefined ? trackData.trilinear : (window.ATR.trilinear !== undefined ? window.ATR.trilinear : true);
+    this.anisotropic = trackData.anisotropic !== undefined ? trackData.anisotropic : (window.ATR.anisotropic !== undefined ? window.ATR.anisotropic : false);
 
     const isSuperwide = (trackData.mapLayout === 'LOTUS_SUPERWIDE');
     this.roadWidth = isSuperwide ? 80.0 : 16.0;
@@ -49,7 +55,7 @@ class InfiniteLotusTrack {
     this.initEnvironmentTheme();
 
     this.billboardTextures = this.createBillboardTextures();
-    this.roadTexture = this.createLotusRoadTexture();
+    this.roadTexture = this.createLotusRoadTexture(this.roadStyle, this.trilinear, this.anisotropic);
 
     this.extendWaypointsUpTo(850.0);
     this.updateChunks(0);
@@ -99,48 +105,131 @@ class InfiniteLotusTrack {
     this.scene.fog.far = this.theme.fogFar;
   }
 
-  createLotusRoadTexture() {
+  createLotusRoadTexture(style = this.roadStyle || 'CLEAR', trilinear = this.trilinear, anisotropic = this.anisotropic) {
+    const isOriginal = (style === 'ORIGINAL');
     const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 512;
+    const size = isOriginal ? 512 : 1024;
+    canvas.width = canvas.height = size;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#1c1e22';
-    ctx.fillRect(0, 0, 512, 512);
 
-    for (let i = 0; i < 3500; i++) {
-      ctx.fillStyle = Math.random() > 0.5 ? '#16171b' : '#26282e';
-      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+    if (isOriginal) {
+      ctx.fillStyle = '#1c1e22';
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 3500; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#16171b' : '#26282e';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      }
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(8, 0, 8, 512);
+      ctx.fillRect(496, 0, 8, 512);
+
+      if (this.roadWidth >= 70) {
+        // 10-Lane superwide dash dividers
+        ctx.fillStyle = '#ffffff';
+        for (let y = 20; y < 512; y += 96) {
+          ctx.fillRect(252, y, 8, 54);
+        }
+        ctx.fillStyle = '#eedd44';
+        const laneIntervals = [51, 102, 153, 204, 306, 357, 408, 459];
+        for (let lx of laneIntervals) {
+          for (let y = 10; y < 512; y += 96) {
+            ctx.fillRect(lx, y, 4, 48);
+          }
+        }
+      } else {
+        for (let y = 20; y < 512; y += 96) ctx.fillRect(250, y, 12, 54);
+        ctx.fillStyle = '#eedd44';
+        for (let y = 10; y < 512; y += 96) {
+          ctx.fillRect(132, y, 6, 48);
+          ctx.fillRect(374, y, 6, 48);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1, 10);
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = trilinear ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+      tex.generateMipmaps = !!trilinear;
+      tex.anisotropy = anisotropic ? Math.max(1, Math.min(16, window.gameApp?.renderer?.capabilities?.getMaxAnisotropy?.() || 16)) : 1;
+      return tex;
     }
 
+    // --- CLEAR ROAD SURFACE ---
+    const grad = ctx.createLinearGradient(0, 0, size, 0);
+    grad.addColorStop(0, '#191b20');
+    grad.addColorStop(0.5, '#22252c');
+    grad.addColorStop(1, '#191b20');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Soft non-aliasing asphalt aggregate texture
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.016)';
+    for (let i = 0; i < 500; i++) {
+      ctx.fillRect(Math.random() * size, Math.random() * size, 3, 3);
+    }
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.035)';
+    for (let i = 0; i < 500; i++) {
+      ctx.fillRect(Math.random() * size, Math.random() * size, 4, 4);
+    }
+
+    // Anti-aliased, bold outer edge shoulder lines
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(8, 0, 8, 512);
-    ctx.fillRect(496, 0, 8, 512);
+    ctx.fillRect(16, 0, 24, size);
+    ctx.fillRect(size - 40, 0, 24, size);
 
     if (this.roadWidth >= 70) {
-      // 10-Lane superwide dash dividers
+      // Superwide road markings: high-contrast dashes
       ctx.fillStyle = '#ffffff';
-      for (let y = 20; y < 512; y += 96) {
-        ctx.fillRect(252, y, 8, 54);
+      for (let y = 50; y < size; y += 256) {
+        ctx.fillRect(size / 2 - 10, y, 20, 140);
       }
-      ctx.fillStyle = '#eedd44';
-      const laneIntervals = [51, 102, 153, 204, 306, 357, 408, 459];
+      ctx.fillStyle = '#ffd700';
+      const laneIntervals = [102, 204, 306, 408, 612, 714, 816, 918];
       for (let lx of laneIntervals) {
-        for (let y = 10; y < 512; y += 96) {
-          ctx.fillRect(lx, y, 4, 48);
+        for (let y = 35; y < size; y += 256) {
+          ctx.fillRect(lx - 5, y, 10, 120);
         }
       }
     } else {
-      for (let y = 20; y < 512; y += 96) ctx.fillRect(250, y, 12, 54);
-      ctx.fillStyle = '#eedd44';
-      for (let y = 10; y < 512; y += 96) {
-        ctx.fillRect(132, y, 6, 48);
-        ctx.fillRect(374, y, 6, 48);
+      // Standard road markings: prominent center dashes and yellow lane dividers
+      ctx.fillStyle = '#ffffff';
+      for (let y = 45; y < size; y += 256) {
+        ctx.fillRect(size / 2 - 14, y, 28, 145);
+      }
+      ctx.fillStyle = '#ffd700';
+      for (let y = 30; y < size; y += 256) {
+        ctx.fillRect(Math.round(size * 0.26) - 6, y, 12, 125);
+        ctx.fillRect(Math.round(size * 0.74) - 6, y, 12, 125);
       }
     }
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(1, 10);
+    tex.repeat.set(1, 1.25);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = trilinear ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+    tex.generateMipmaps = !!trilinear;
+    tex.anisotropy = anisotropic ? Math.max(1, Math.min(16, window.gameApp?.renderer?.capabilities?.getMaxAnisotropy?.() || 16)) : 1;
+
     return tex;
+  }
+
+  setRoadStyle(style, trilinear = this.trilinear, anisotropic = this.anisotropic) {
+    this.roadStyle = style;
+    this.trilinear = trilinear;
+    this.anisotropic = anisotropic;
+    const newTex = this.createLotusRoadTexture(style, trilinear, anisotropic);
+    if (this.roadTexture) this.roadTexture.dispose();
+    this.roadTexture = newTex;
+    for (let chunk of this.activeChunks.values()) {
+      if (chunk.roadMesh && chunk.roadMesh.material) {
+        chunk.roadMesh.material.map = this.roadTexture;
+        chunk.roadMesh.material.needsUpdate = true;
+      }
+    }
   }
 
   createBillboardTextures() {

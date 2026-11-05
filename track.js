@@ -3,6 +3,8 @@
    Constructs standard circuits, the Daytona NASCAR oval,
    road ribbon geometry, curbs, roadside props, and pit lane.
    Serves as entry facade delegating to InfiniteLotusTrack.
+   Includes selectable clear trilinear / anisotropic road
+   rendering and classic retro pixel noise surface styles.
    =================================================== */
 
 window.ATR = window.ATR || {};
@@ -19,6 +21,10 @@ class Track {
     this.spline = trackData.spline;
     this.totalLength = trackData.totalLength;
     this.envType = trackData.envType;
+
+    this.roadStyle = trackData.roadStyle || window.ATR.roadStyle || 'CLEAR';
+    this.trilinear = trackData.trilinear !== undefined ? trackData.trilinear : (window.ATR.trilinear !== undefined ? window.ATR.trilinear : true);
+    this.anisotropic = trackData.anisotropic !== undefined ? trackData.anisotropic : (window.ATR.anisotropic !== undefined ? window.ATR.anisotropic : false);
 
     if (this.data.mapLayout === 'OVAL') {
       this.roadWidth = 24.0;
@@ -91,7 +97,10 @@ class Track {
     if (this.roadMesh) {
       this.scene.remove(this.roadMesh);
       if (this.roadMesh.geometry) this.roadMesh.geometry.dispose();
-      if (this.roadMesh.material) this.roadMesh.material.dispose();
+      if (this.roadMesh.material) {
+        if (this.roadMesh.material.map) this.roadMesh.material.map.dispose();
+        this.roadMesh.material.dispose();
+      }
     }
     if (this.shoulderMesh) {
       this.scene.remove(this.shoulderMesh);
@@ -245,10 +254,7 @@ class Track {
     roadGeo.setIndex(roadIndices);
     roadGeo.computeVertexNormals();
 
-    const roadTex = this.createRoadTexture();
-    roadTex.wrapS = THREE.RepeatWrapping;
-    roadTex.wrapT = THREE.RepeatWrapping;
-    roadTex.repeat.set(1, 45);
+    const roadTex = this.createRoadTexture(this.roadStyle, this.trilinear, this.anisotropic);
 
     const roadMat = new THREE.MeshStandardMaterial({
       map: roadTex,
@@ -272,30 +278,87 @@ class Track {
     this.buildTerrainPlane();
   }
 
-  createRoadTexture() {
+  createRoadTexture(style = this.roadStyle || 'CLEAR', trilinear = this.trilinear, anisotropic = this.anisotropic) {
+    const isOriginal = (style === 'ORIGINAL');
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    const size = isOriginal ? 512 : 1024;
+    canvas.width = canvas.height = size;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = '#222328';
-    ctx.fillRect(0, 0, 512, 512);
+    if (isOriginal) {
+      ctx.fillStyle = '#222328';
+      ctx.fillRect(0, 0, 512, 512);
 
-    for (let i = 0; i < 4000; i++) {
-      ctx.fillStyle = Math.random() > 0.5 ? '#1a1b1e' : '#2b2d33';
-      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      for (let i = 0; i < 4000; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#1a1b1e' : '#2b2d33';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      }
+
+      ctx.fillStyle = '#ffffff';
+      for (let y = 30; y < 512; y += 100) {
+        ctx.fillRect(248, y, 16, 50);
+      }
+
+      ctx.fillStyle = '#eedd44';
+      ctx.fillRect(12, 0, 10, 512);
+      ctx.fillRect(490, 0, 10, 512);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1, 45);
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = trilinear ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+      tex.generateMipmaps = !!trilinear;
+      tex.anisotropy = anisotropic ? Math.max(1, Math.min(16, window.gameApp?.renderer?.capabilities?.getMaxAnisotropy?.() || 16)) : 1;
+      return tex;
     }
 
+    // --- CLEAR ROAD SURFACE ---
+    const grad = ctx.createLinearGradient(0, 0, size, 0);
+    grad.addColorStop(0, '#1c1f26');
+    grad.addColorStop(0.5, '#242831');
+    grad.addColorStop(1, '#1c1f26');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Soft non-aliasing asphalt aggregate texture
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    for (let i = 0; i < 500; i++) {
+      ctx.fillRect(Math.random() * size, Math.random() * size, 3, 3);
+    }
+
+    // High-visibility edge lines
+    ctx.fillStyle = '#ffdd00';
+    ctx.fillRect(20, 0, 20, size);
+    ctx.fillRect(size - 40, 0, 20, size);
+
+    // High-contrast center dashes
     ctx.fillStyle = '#ffffff';
-    for (let y = 30; y < 512; y += 100) {
-      ctx.fillRect(248, y, 16, 50);
+    for (let y = 50; y < size; y += 256) {
+      ctx.fillRect(size / 2 - 14, y, 28, 140);
     }
 
-    ctx.fillStyle = '#eedd44';
-    ctx.fillRect(12, 0, 10, 512);
-    ctx.fillRect(490, 0, 10, 512);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 20);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = trilinear ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+    tex.generateMipmaps = !!trilinear;
+    tex.anisotropy = anisotropic ? Math.max(1, Math.min(16, window.gameApp?.renderer?.capabilities?.getMaxAnisotropy?.() || 16)) : 1;
 
-    return new THREE.CanvasTexture(canvas);
+    return tex;
+  }
+
+  setRoadStyle(style, trilinear = this.trilinear, anisotropic = this.anisotropic) {
+    this.roadStyle = style;
+    this.trilinear = trilinear;
+    this.anisotropic = anisotropic;
+    const newTex = this.createRoadTexture(style, trilinear, anisotropic);
+    if (this.roadMesh && this.roadMesh.material) {
+      if (this.roadMesh.material.map) this.roadMesh.material.map.dispose();
+      this.roadMesh.material.map = newTex;
+      this.roadMesh.material.needsUpdate = true;
+    }
   }
 
   buildTerrainPlane() {

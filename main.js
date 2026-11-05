@@ -4,6 +4,7 @@
    responsive scaling, mobile controls, FPS counter,
    pitstop service (fuel, damage, tires), procedural
    cloud system updates, pause states, HUD states,
+   road surface style configuration (trilinear/original),
    and infinite Lotus Highway tactical radar & chunk cycles.
    =================================================== */
 
@@ -46,6 +47,15 @@ class Game {
     this.totalLaps = 3;
     this.aiCount = 3;
     this.counterClockwise = false;
+
+    // Road Texture & Filtering Settings (Trilinear-only by default)
+    this.roadStyle = 'CLEAR';
+    this.trilinear = true;
+    this.anisotropic = false;
+    window.ATR.roadStyle = this.roadStyle;
+    window.ATR.trilinear = this.trilinear;
+    window.ATR.anisotropic = this.anisotropic;
+
     this.clock = new THREE.Clock();
 
     this.fpsElement = document.getElementById('fps-counter');
@@ -273,6 +283,75 @@ class Game {
 
     if (devPixelCheck) devPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
     if (optPixelCheck) optPixelCheck.addEventListener('change', (e) => onPixelModeChange(e.target.checked));
+
+    // Road Texture & Filtering UI Synchronization
+    const optRoadStyle = document.getElementById('opt-road-style');
+    const devClearRoad = document.getElementById('dev-clear-road');
+    const optTrilinear = document.getElementById('opt-trilinear');
+    const devTrilinear = document.getElementById('dev-trilinear');
+    const optAnisotropic = document.getElementById('opt-anisotropic');
+    const devAnisotropic = document.getElementById('dev-anisotropic');
+
+    const syncFilteringUI = () => {
+      if (optRoadStyle) optRoadStyle.value = this.roadStyle;
+      if (devClearRoad) devClearRoad.checked = (this.roadStyle === 'CLEAR');
+      if (optTrilinear) optTrilinear.checked = this.trilinear;
+      if (devTrilinear) devTrilinear.checked = this.trilinear;
+      if (optAnisotropic) optAnisotropic.checked = this.anisotropic;
+      if (devAnisotropic) devAnisotropic.checked = this.anisotropic;
+    };
+
+    const applyFiltering = () => {
+      window.ATR.roadStyle = this.roadStyle;
+      window.ATR.trilinear = this.trilinear;
+      window.ATR.anisotropic = this.anisotropic;
+      syncFilteringUI();
+      if (this.track && typeof this.track.setRoadStyle === 'function') {
+        this.track.setRoadStyle(this.roadStyle, this.trilinear, this.anisotropic);
+      }
+    };
+
+    // "Clear Road Surface" master toggle: clears/activates both trilinear & anisotropic
+    const onClearRoadToggle = (enableClearBoth) => {
+      if (enableClearBoth) {
+        this.roadStyle = 'CLEAR';
+        this.trilinear = true;
+        this.anisotropic = true;
+      } else {
+        this.roadStyle = 'ORIGINAL';
+        this.trilinear = false;
+        this.anisotropic = false;
+      }
+      applyFiltering();
+    };
+
+    if (devClearRoad) {
+      devClearRoad.addEventListener('change', (e) => onClearRoadToggle(e.target.checked));
+    }
+
+    if (optRoadStyle) {
+      optRoadStyle.addEventListener('change', (e) => {
+        this.roadStyle = e.target.value;
+        applyFiltering();
+      });
+    }
+
+    // Separate individual toggles for trilinear and anisotropic filtering
+    const onTrilinearChange = (enabled) => {
+      this.trilinear = enabled;
+      applyFiltering();
+    };
+    if (optTrilinear) optTrilinear.addEventListener('change', (e) => onTrilinearChange(e.target.checked));
+    if (devTrilinear) devTrilinear.addEventListener('change', (e) => onTrilinearChange(e.target.checked));
+
+    const onAnisotropicChange = (enabled) => {
+      this.anisotropic = enabled;
+      applyFiltering();
+    };
+    if (optAnisotropic) optAnisotropic.addEventListener('change', (e) => onAnisotropicChange(e.target.checked));
+    if (devAnisotropic) devAnisotropic.addEventListener('change', (e) => onAnisotropicChange(e.target.checked));
+
+    syncFilteringUI();
 
     window.ATR.devSettings = {
       smoothCamera: true,
@@ -661,6 +740,9 @@ class Game {
 
     const generator = new window.ATR.TrackGenerator();
     const trackData = generator.generate(this.seed, 'MEDIUM', this.envType, 72, this.mapLayout, this.counterClockwise);
+    trackData.roadStyle = this.roadStyle;
+    trackData.trilinear = this.trilinear;
+    trackData.anisotropic = this.anisotropic;
     this.track = new window.ATR.Track(this.scene, trackData);
     this.initMinimapTrack();
 
