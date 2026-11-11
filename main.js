@@ -48,9 +48,9 @@ class Game {
     this.aiCount = 3;
     this.counterClockwise = false;
 
-    // Road Texture & Filtering Settings (Trilinear-only by default)
-    this.roadStyle = 'CLEAR';
-    this.trilinear = true;
+    // Road Texture & Filtering Settings (Disabled by default)
+    this.roadStyle = 'ORIGINAL';
+    this.trilinear = false;
     this.anisotropic = false;
     window.ATR.roadStyle = this.roadStyle;
     window.ATR.trilinear = this.trilinear;

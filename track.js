@@ -22,8 +22,8 @@ class Track {
     this.totalLength = trackData.totalLength;
     this.envType = trackData.envType;
 
-    this.roadStyle = trackData.roadStyle || window.ATR.roadStyle || 'CLEAR';
-    this.trilinear = trackData.trilinear !== undefined ? trackData.trilinear : (window.ATR.trilinear !== undefined ? window.ATR.trilinear : true);
+    this.roadStyle = trackData.roadStyle || window.ATR.roadStyle || 'ORIGINAL';
+    this.trilinear = trackData.trilinear !== undefined ? trackData.trilinear : (window.ATR.trilinear !== undefined ? window.ATR.trilinear : false);
     this.anisotropic = trackData.anisotropic !== undefined ? trackData.anisotropic : (window.ATR.anisotropic !== undefined ? window.ATR.anisotropic : false);
 
     if (this.data.mapLayout === 'OVAL') {
@@ -278,7 +278,7 @@ class Track {
     this.buildTerrainPlane();
   }
 
-  createRoadTexture(style = this.roadStyle || 'CLEAR', trilinear = this.trilinear, anisotropic = this.anisotropic) {
+  createRoadTexture(style = this.roadStyle || 'ORIGINAL', trilinear = this.trilinear, anisotropic = this.anisotropic) {
     const isOriginal = (style === 'ORIGINAL');
     const canvas = document.createElement('canvas');
     const size = isOriginal ? 512 : 1024;
