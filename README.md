@@ -7,6 +7,10 @@
 
 A browser-based retro arcade racing game inspired by the look and feel of classic Amiga-era racing games. Built with HTML, CSS, JavaScript and Three.js, it features low-poly 3D racing, configurable circuits and environments, AI opponents, split-screen multiplayer, turbo, fuel, pit stops, mobile touch controls and a CRT-style presentation.
 
+## Screenshots
+![Game 1](screenshots/game_1.png)
+
+
 ## Features
 
 - Low-poly 3D arcade racing
